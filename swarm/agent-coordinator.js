@@ -36,7 +36,44 @@ const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
 const APP_REQUIREMENTS = `
 PROXIMITY SOCIAL APP - DEVELOPMENT REQUIREMENTS
 
-✅ COMPLETED:
+TECH STACK: React Native + Expo + TypeScript + Supabase
+
+FILE STRUCTURE:
+- src/screens/auth/LoginScreen.tsx
+- src/screens/auth/ProfileSetupScreen.tsx
+- src/screens/main/ProximityFeedScreen.tsx
+- src/screens/main/ChatThreadScreen.tsx
+- src/components/Card.tsx
+- src/components/common/Avatar.tsx
+- src/components/common/EmptyState.tsx
+- src/components/proximity/NearbyPeerCard.tsx
+- src/components/proximity/RadiusFilterPill.tsx
+- src/components/proximity/RadiusWheel.tsx
+- src/components/proximity/RadiusSlider.tsx
+- src/components/proximity/SignalIndicator.tsx
+- src/components/proximity/DistanceBadge.tsx
+- src/components/proximity/ProximityHeader.tsx
+- src/theme/index.ts (main theme file)
+- src/theme/DesignTokens.ts
+- src/constants/theme.ts (colors, spacing)
+- src/hooks/auth/useAuth.ts
+- src/hooks/location/useCurrentLocation.ts
+- src/hooks/proximity/useNearbyPeers.ts
+- src/hooks/messaging/useChatMessages.ts
+- src/lib/utils/index.ts
+- src/types/index.ts
+- src/types/database.ts
+- src/config/supabase.ts
+
+CURRENT THEME (src/constants/theme.ts):
+- background: '#F9FAFB' (light gray)
+- surface: '#FFFFFF'
+- primary: '#6366F1' (indigo)
+- text.primary: '#111827'
+
+NAVIGATION: Expo Router (file-based routing)
+
+✅ COMPLETED FEATURES:
 - Database setup with PostGIS
 - Authentication (Login/Signup)
 - Profile management
@@ -44,8 +81,8 @@ PROXIMITY SOCIAL APP - DEVELOPMENT REQUIREMENTS
 - Real-time chat with WebSockets
 - Test accounts
 
-❌ TODO (Priority Order):
-1. Enable live distance updates (2-3 line change)
+❌ TODO:
+1. Dark mode / black background theme
 2. Fix message syncing edge cases
 3. User blocking system
 4. Chat read receipts
@@ -177,44 +214,64 @@ START WITH "File:" and show COMPLETE working code.`,
     }
 
     // === EXTRACT AND SAVE CODE ===
-    const fileMatches = result.match(/File:\s*([^\n]+)/g) || [];
     const savedFiles = [];
-    
-    for (const fileMatch of fileMatches) {
-      const filePath = fileMatch.replace('File:', '').trim();
-      
-      const fileIndex = result.indexOf(fileMatch);
-      const nextFileIndex = result.indexOf('File:', fileIndex + 1);
-      const endIndex = nextFileIndex === -1 ? result.length : nextFileIndex;
-      
-      let codeBlock = result.substring(fileIndex + fileMatch.length, endIndex);
-      const codeMatch = codeBlock.match(/```(?:typescript|tsx|ts|javascript|jsx)?[\n\r]([\s\S]*?)```/);
+
+    // Match various file path patterns the LLM might use
+    const filePatterns = [
+      /(?:^|\n)(?:File|file|FILE|filename|Filename):\s*([^\n]+)/g,
+      /(?:^|\n)\/\/\s*([^\n]+\.(tsx?|jsx?|ts|js|json|css|scss))/g,
+      /(?:^|\n)#+\s*([^\n]+\.(tsx?|jsx?|ts|js|json|css|scss))/g,
+    ];
+
+    let allFileMatches = [];
+    for (const pattern of filePatterns) {
+      const matches = [...result.matchAll(pattern)];
+      allFileMatches = allFileMatches.concat(matches.map(m => m[1].trim()));
+    }
+    // Deduplicate
+    allFileMatches = [...new Set(allFileMatches)];
+
+    console.log(`📁 Found ${allFileMatches.length} file(s) in response`);
+
+    for (const filePath of allFileMatches) {
+      // Clean up the path
+      const cleanPath = filePath.replace(/^['"`]|['"`]$/g, '').trim();
+      if (!cleanPath || cleanPath.length > 200) continue;
+
+      // Find the code block nearest to this file reference
+      const fileIndex = result.indexOf(filePath);
+      const nextFileIndex = allFileMatches
+        .map(f => result.indexOf(f, fileIndex + 1))
+        .filter(i => i > fileIndex)
+        .sort((a, b) => a - b)[0] || result.length;
+
+      let codeBlock = result.substring(fileIndex + filePath.length, nextFileIndex);
+
+      // Extract from ``` code blocks
+      const codeMatch = codeBlock.match(/```(?:typescript|tsx|ts|javascript|jsx|js)?\n?([\s\S]*?)```/);
       if (codeMatch) codeBlock = codeMatch[1];
+
       const code = codeBlock.trim();
-      
-      if (code.length > 0) {
-        // Use Render's writable project directory
-        const appPath = process.env.PROJECT_PATH || '/opt/render/project/proximity-app';
-        const fullPath = path.join(appPath, filePath);
-        
-        console.log(`💾 Saving to: ${fullPath}`);
+      if (code.length < 10) continue; // Skip empty blocks
+
+      const appPath = process.env.PROJECT_PATH || '/opt/render/project/proximity-app';
+      const fullPath = path.join(appPath, cleanPath);
+
+      console.log(`💾 Saving to: ${fullPath}`);
+      try {
+        fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+        fs.writeFileSync(fullPath, code, 'utf-8');
+        savedFiles.push({ fullPath, filePath: cleanPath });
+        console.log(`✅ Saved: ${fullPath}`);
+      } catch (writeError) {
+        const fallbackPath = path.join(__dirname, 'output', cleanPath);
         try {
-          const dir = path.dirname(fullPath);
-          fs.mkdirSync(dir, { recursive: true });
-          fs.writeFileSync(fullPath, code, 'utf-8');
-          savedFiles.push({ fullPath, filePath });
-          console.log(`✅ Saved: ${fullPath}`);
-        } catch (writeError) {
-          // Fallback: save to local swarm/output directory
-          const fallbackPath = path.join(__dirname, 'output', filePath);
-          try {
-            fs.mkdirSync(path.dirname(fallbackPath), { recursive: true });
-            fs.writeFileSync(fallbackPath, code, 'utf-8');
-            savedFiles.push({ fullPath: fallbackPath, filePath });
-            console.log(`✅ Saved (fallback): ${fallbackPath}`);
-          } catch (e) {
-            console.error(`❌ Could not save ${filePath}: ${writeError.message}`);
-          }
+          fs.mkdirSync(path.dirname(fallbackPath), { recursive: true });
+          fs.writeFileSync(fallbackPath, code, 'utf-8');
+          savedFiles.push({ fullPath: fallbackPath, filePath: cleanPath });
+          console.log(`✅ Saved (fallback): ${fallbackPath}`);
+        } catch (e) {
+          console.error(`❌ Could not save ${cleanPath}: ${writeError.message}`);
         }
       }
     }
