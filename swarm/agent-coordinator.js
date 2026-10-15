@@ -720,10 +720,42 @@ bot.use((ctx, next) => {
 console.log('🤖 Agent Coordinator Started');
 console.log('📱 Listening for Telegram messages...\n');
 
-// Use Telegraf's built-in polling with dropPendingUpdates to clear old messages
-bot.launch({
-  dropPendingUpdates: true
+// Start Telegram bot with error handling
+async function startBot() {
+  try {
+    await bot.launch({
+      dropPendingUpdates: true
+    });
+    console.log('✅ Telegram bot launched successfully');
+  } catch (error) {
+    console.error('❌ Failed to launch Telegram bot:', error.message);
+    console.error('   Bot will retry polling...');
+    // Don't crash - continue running
+    setTimeout(startBot, 5000); // Retry after 5 seconds
+  }
+}
+
+startBot();
+
+// Graceful shutdown
+process.once('SIGINT', () => {
+  console.log('Shutting down...');
+  bot.stop('SIGINT');
 });
 
-process.once('SIGINT', () => bot.stop('SIGINT'));
-process.once('SIGTERM', () => bot.stop('SIGTERM'));
+process.once('SIGTERM', () => {
+  console.log('Shutting down...');
+  bot.stop('SIGTERM');
+});
+
+// Global error handler to prevent crashes
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error.message);
+  console.error(error.stack);
+  // Continue running instead of crashing
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  // Continue running instead of crashing
+});
