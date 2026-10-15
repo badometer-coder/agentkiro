@@ -637,21 +637,21 @@ bot.on('text', async (ctx) => {
         content: `You are an autonomous AI dev agent building the Proximity Social App (React Native + TypeScript).
 
 CURRENT STATE: ${taskQueue.length} tasks queued, ${taskLog.length} done.
-${taskQueue.length > 0 ? `Next tasks:\n${taskPreview}` : 'No tasks queued.'}
+${taskQueue.length > 0 ? `Queued tasks:\n${taskPreview}` : 'No tasks queued.'}
 
-CRITICAL: You MUST use action tags whenever user wants something done:
-- User asks to build/change/fix/improve/make anything → [DOTASK: full task description with file path]
-- User says "go ahead", "do it", "please", "yes", "continue", "sure" → [DOTASK: repeat what they asked for before]
-- User asks to plan something specific → [DOPLAN: topic]
-- User asks to run N tasks → [RUN: N]
-- Pure chat only → no tags
+ACTION TAGS (add at end of reply):
+- User wants you to build/change/fix/improve/make something → [DOTASK: specific description with file path]
+- User says "go ahead", "do it", "yes", "please", "continue", "sure", "proceed" → check history and repeat last requested task as [DOTASK: ...]
+- User wants a list of tasks created → [DOPLAN: topic]
+- User wants to run queued tasks → [RUN: N]
+- Pure chat → no tags
 
-IMPORTANT: If user is following up on a previous request (like "go ahead" or "please"), look at conversation history and repeat the last task they asked for.
-
-Reply under 50 words then add the tag.`,
+NEVER use [DOPLAN:] unless user explicitly says "make a plan" or "create tasks".
+For "make a change", "improve", "fix", "update" → always use [DOTASK:] directly.
+Keep reply under 50 words.`,
       },
       ...conversationHistory,
-    ], { temperature: 0.5, max_tokens: 200 });
+    ], { temperature: 0.3, max_tokens: 200 });
 
     // Add to history
     conversationHistory.push({ role: 'assistant', content: llmReply });
@@ -659,8 +659,14 @@ Reply under 50 words then add the tag.`,
     // Parse action tags
     const cleanReply = llmReply.replace(/\[(DOTASK|DOPLAN|RUN):[^\]]*\]/g, '').trim();
     const taskMatch = llmReply.match(/\[DOTASK:\s*([^\]]+)\]/);
-    const planMatch = llmReply.match(/\[DOPLAN:\s*([^\]]+)\]/);
+    let planMatch = llmReply.match(/\[DOPLAN:\s*([^\]]+)\]/);
     const runMatch2 = llmReply.match(/\[RUN:\s*(\d+)\]/);
+
+    // Safety: if user didn't say "plan" or "create tasks", don't create a plan - execute directly
+    if (planMatch && !msg.includes('make a plan') && !msg.includes('create tasks') && !msg.includes('create a plan')) {
+      console.log(`⚠️ LLM tried DOPLAN but user didn't ask for a plan - converting to DOTASK`);
+      planMatch = null;
+    }
 
     if (cleanReply) await ctx.reply(cleanReply);
 
