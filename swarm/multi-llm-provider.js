@@ -114,7 +114,7 @@ class MultiLLMProvider {
         if (provider.type === 'groq') {
           try {
             response = await provider.client.chat.completions.create({
-              model: options.model || 'openai/gpt-oss-20b',
+              model: options.model || 'qwen/qwen3.8-27b',
               messages: messages,
               temperature: options.temperature || 0.7,
               max_tokens: options.max_tokens || 3000,
