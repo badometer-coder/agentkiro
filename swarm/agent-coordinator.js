@@ -90,7 +90,7 @@ Create 5 specific, actionable development tasks with exact file paths and implem
 
     const plan = await llmProvider.callLLM(messages, {
       temperature: 0.6,
-      max_tokens: 1500,
+      max_tokens: 800,
     });
 
     const tasks = plan.split('\n').filter(line => line.trim().length > 0);
@@ -155,7 +155,7 @@ START WITH "File:" and show COMPLETE working code.`,
       result = await Promise.race([
         llmProvider.callLLM(messages, {
           temperature: 0.7,
-          max_tokens: 3000,
+          max_tokens: 900,
           timeout: 6 * 60 * 1000, // 6 minute timeout
         }),
         new Promise((_, reject) =>
@@ -573,11 +573,10 @@ YOU CAN:
    [ACTION:STATUS] - show status
 
 RULES:
-- Always respond conversationally first, then add the action tag if needed
-- Be helpful, friendly and proactive
-- If user asks you to do something, DO it (include the action tag)
-- Keep responses concise
-- Report what you're doing`,
+- Only add an action tag if the user EXPLICITLY asks you to do something (run tasks, make a plan, etc.)
+- If user just says "hey", "hi", "hello" or is just chatting, just chat back - NO action tags
+- Be helpful, friendly and concise
+- Keep responses under 100 words`,
       },
       {
         role: 'user',
@@ -585,7 +584,7 @@ RULES:
       },
     ], {
       temperature: 0.7,
-      max_tokens: 300,
+      max_tokens: 200,
     });
 
     // Extract action tag if present

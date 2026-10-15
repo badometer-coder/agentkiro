@@ -117,7 +117,7 @@ class MultiLLMProvider {
               model: options.model || 'qwen/qwen3.8-27b',
               messages: messages,
               temperature: options.temperature || 0.7,
-              max_tokens: options.max_tokens || 3000,
+              max_tokens: options.max_tokens || 800,
             });
             const content = response.choices[0]?.message?.content || '';
             console.log(`✅ ${provider.name} succeeded`);
@@ -153,7 +153,7 @@ class MultiLLMProvider {
               model: options.model || 'gpt-4o-mini',
               messages: messages,
               temperature: options.temperature || 0.7,
-              max_tokens: options.max_tokens || 3000,
+              max_tokens: options.max_tokens || 800,
             });
             const content = response.choices[0]?.message?.content || '';
             console.log(`✅ ${provider.name} succeeded`);
