@@ -178,41 +178,43 @@ START WITH "File:" and show COMPLETE working code.`,
 
     // === EXTRACT AND SAVE CODE ===
     const fileMatches = result.match(/File:\s*([^\n]+)/g) || [];
+    const savedFiles = [];
     
     for (const fileMatch of fileMatches) {
       const filePath = fileMatch.replace('File:', '').trim();
       
-      // Extract code block after "File: path"
       const fileIndex = result.indexOf(fileMatch);
       const nextFileIndex = result.indexOf('File:', fileIndex + 1);
       const endIndex = nextFileIndex === -1 ? result.length : nextFileIndex;
       
       let codeBlock = result.substring(fileIndex + fileMatch.length, endIndex);
-      
-      // Extract from code blocks if wrapped in ```
       const codeMatch = codeBlock.match(/```(?:typescript|tsx|ts|javascript|jsx)?[\n\r]([\s\S]*?)```/);
-      if (codeMatch) {
-        codeBlock = codeMatch[1];
-      }
-      
+      if (codeMatch) codeBlock = codeMatch[1];
       const code = codeBlock.trim();
       
       if (code.length > 0) {
-        // Resolve to actual app path
-        const appPath = process.env.PROJECT_PATH || '/Users/owner/proximity-app-final';
+        // Use Render's writable project directory
+        const appPath = process.env.PROJECT_PATH || '/opt/render/project/proximity-app';
         const fullPath = path.join(appPath, filePath);
         
         console.log(`💾 Saving to: ${fullPath}`);
-        
         try {
           const dir = path.dirname(fullPath);
-          if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
-          }
+          fs.mkdirSync(dir, { recursive: true });
           fs.writeFileSync(fullPath, code, 'utf-8');
-          console.log(`✅ Code saved to ${fullPath}`);
+          savedFiles.push(fullPath);
+          console.log(`✅ Saved: ${fullPath}`);
         } catch (writeError) {
-          console.error(`❌ Failed to save ${fullPath}:`, writeError.message);
+          // Fallback: save to local swarm/output directory
+          const fallbackPath = path.join(__dirname, 'output', filePath);
+          try {
+            fs.mkdirSync(path.dirname(fallbackPath), { recursive: true });
+            fs.writeFileSync(fallbackPath, code, 'utf-8');
+            savedFiles.push(fallbackPath);
+            console.log(`✅ Saved (fallback): ${fallbackPath}`);
+          } catch (e) {
+            console.error(`❌ Could not save ${filePath}: ${writeError.message}`);
+          }
         }
       }
     }
@@ -220,11 +222,16 @@ START WITH "File:" and show COMPLETE working code.`,
     taskLog.push({
       task: taskDescription,
       result: result,
+      savedFiles: savedFiles,
       timestamp: new Date().toISOString(),
       provider: llmProvider.getCurrentProvider().name,
     });
     
-    console.log('✅ Task execution complete\n');
+    if (savedFiles.length > 0) {
+      console.log(`✅ Task complete - saved ${savedFiles.length} file(s)`);
+    } else {
+      console.log(`✅ Task execution complete (no files saved)\n`);
+    }
     return result;
   } catch (error) {
     console.error('Error executing task:', error.message);
