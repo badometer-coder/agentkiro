@@ -20,21 +20,7 @@ class MultiLLMProvider {
   }
 
   initializeProviders() {
-    // Load Groq keys
-    const groqKeys = this.loadApiKeys('GROQ_API_KEY');
-    groqKeys.forEach((key, idx) => {
-      this.providers.push({
-        type: 'groq',
-        key: key,
-        client: new Groq({
-          apiKey: key,
-          timeout: 10 * 60 * 1000, // 10 minutes
-        }),
-        name: `Groq #${idx + 1}`,
-      });
-    });
-
-    // Load Gemini keys (commented out for now)
+    // === GEMINI FIRST — better code quality, larger output, 1M context ===
     const geminiKeys = this.loadApiKeys('GEMINI_API_KEY');
     geminiKeys.forEach((key, idx) => {
       if (key && !key.includes('paste_your')) {
@@ -47,7 +33,21 @@ class MultiLLMProvider {
       }
     });
 
-    // Load OpenAI keys (commented out for now)
+    // === GROQ as fallback (fast but small output) ===
+    const groqKeys = this.loadApiKeys('GROQ_API_KEY');
+    groqKeys.forEach((key, idx) => {
+      this.providers.push({
+        type: 'groq',
+        key: key,
+        client: new Groq({
+          apiKey: key,
+          timeout: 10 * 60 * 1000,
+        }),
+        name: `Groq #${idx + 1}`,
+      });
+    });
+
+    // === OpenAI as last resort ===
     const openaiKeys = this.loadApiKeys('OPENAI_API_KEY');
     openaiKeys.forEach((key, idx) => {
       if (key && !key.includes('paste_your')) {
@@ -56,7 +56,7 @@ class MultiLLMProvider {
           key: key,
           client: new OpenAI({
             apiKey: key,
-            timeout: 10 * 60 * 1000, // 10 minutes
+            timeout: 10 * 60 * 1000,
           }),
           name: `OpenAI #${idx + 1}`,
         });
@@ -128,7 +128,11 @@ class MultiLLMProvider {
         } else if (provider.type === 'gemini') {
           try {
             const model = provider.client.getGenerativeModel({
-              model: options.model || 'gemini-1.5-flash',
+              model: 'gemini-1.5-flash',
+              generationConfig: {
+                maxOutputTokens: options.max_tokens || 8192,
+                temperature: options.temperature || 0.3,
+              },
             });
 
             const systemPrompt = messages[0]?.role === 'system' ? messages[0]?.content : '';
