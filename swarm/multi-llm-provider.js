@@ -100,7 +100,7 @@ class MultiLLMProvider {
     let lastError = null;
     let attempts = 0;
     const maxAttempts = this.providers.length;
-    const timeout = options.timeout || 30 * 1000; // 30 seconds default (cloud-friendly)
+    const timeout = options.timeout || 30 * 1000; // 30 seconds default
 
     while (attempts < maxAttempts) {
       const provider = this.getCurrentProvider();
@@ -109,63 +109,63 @@ class MultiLLMProvider {
       try {
         console.log(`📞 Calling ${provider.name}... (timeout: ${timeout / 1000}s)`);
 
-        // Wrap with timeout promise
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error(`Request timeout after ${timeout / 1000}s`)), timeout)
-        );
-
-        let callPromise;
         let response;
 
         if (provider.type === 'groq') {
-          callPromise = provider.client.chat.completions.create({
-            model: options.model || 'openai/gpt-oss-20b',
-            messages: messages,
-            temperature: options.temperature || 0.7,
-            max_tokens: options.max_tokens || 3000,
-          });
-          response = await Promise.race([callPromise, timeoutPromise]);
-          const content = response.choices[0]?.message?.content || '';
-          console.log(`✅ ${provider.name} succeeded`);
-          return content;
+          try {
+            response = await provider.client.chat.completions.create({
+              model: options.model || 'openai/gpt-oss-20b',
+              messages: messages,
+              temperature: options.temperature || 0.7,
+              max_tokens: options.max_tokens || 3000,
+            });
+            const content = response.choices[0]?.message?.content || '';
+            console.log(`✅ ${provider.name} succeeded`);
+            return content;
+          } catch (err) {
+            throw err;
+          }
         } else if (provider.type === 'gemini') {
-          const model = provider.client.getGenerativeModel({
-            model: options.model || 'gemini-1.5-flash',
-          });
+          try {
+            const model = provider.client.getGenerativeModel({
+              model: options.model || 'gemini-1.5-flash',
+            });
 
-          const systemPrompt = messages[0]?.role === 'system' ? messages[0]?.content : '';
-          const userMessages = messages.filter((m) => m.role !== 'system');
+            const systemPrompt = messages[0]?.role === 'system' ? messages[0]?.content : '';
+            const userMessages = messages.filter((m) => m.role !== 'system');
 
-          const chat = model.startChat({
-            systemInstruction: systemPrompt || undefined,
-          });
+            const chat = model.startChat({
+              systemInstruction: systemPrompt || undefined,
+            });
 
-          const userMessage =
-            userMessages[userMessages.length - 1]?.content || 'Process the request';
-          callPromise = chat.sendMessage(userMessage);
-          const result = await Promise.race([callPromise, timeoutPromise]);
-          const content = result.response.text();
-          console.log(`✅ ${provider.name} succeeded`);
-          return content;
+            const userMessage =
+              userMessages[userMessages.length - 1]?.content || 'Process the request';
+            const result = await chat.sendMessage(userMessage);
+            const content = result.response.text();
+            console.log(`✅ ${provider.name} succeeded`);
+            return content;
+          } catch (err) {
+            throw err;
+          }
         } else if (provider.type === 'openai') {
-          callPromise = provider.client.chat.completions.create({
-            model: options.model || 'gpt-4o-mini',
-            messages: messages,
-            temperature: options.temperature || 0.7,
-            max_tokens: options.max_tokens || 3000,
-          });
-          response = await Promise.race([callPromise, timeoutPromise]);
-          const content = response.choices[0]?.message?.content || '';
-          console.log(`✅ ${provider.name} succeeded`);
-          return content;
+          try {
+            response = await provider.client.chat.completions.create({
+              model: options.model || 'gpt-4o-mini',
+              messages: messages,
+              temperature: options.temperature || 0.7,
+              max_tokens: options.max_tokens || 3000,
+            });
+            const content = response.choices[0]?.message?.content || '';
+            console.log(`✅ ${provider.name} succeeded`);
+            return content;
+          } catch (err) {
+            throw err;
+          }
         }
       } catch (error) {
         lastError = error;
         console.error(`❌ ${provider.name} failed:`);
-        console.error(`   Message: ${error.message}`);
-        if (error.stack) {
-          console.error(`   Stack trace: ${error.stack.substring(0, 200)}`);
-        }
+        console.error(`   Error: ${error.message}`);
 
         if (
           error.message.includes('429') ||
@@ -173,22 +173,18 @@ class MultiLLMProvider {
           error.message.includes('quota')
         ) {
           console.log(`⚠️ Rate limit hit. Rotating to next provider...`);
-          
           if (this.notifyCallback) {
-            this.notifyCallback(`⚠️ RATE LIMIT: ${provider.name} exhausted\n\n🔄 Rotating to next provider...`);
+            this.notifyCallback(`⚠️ RATE LIMIT: ${provider.name} exhausted`);
           }
-          
           this.rotateProvider();
         } else if (error.message.includes('timeout') || error.message.includes('timed out')) {
-          console.log(`⏱️ Timeout on ${provider.name}. Rotating to next provider...`);
-          
+          console.log(`⏱️ Timeout on ${provider.name}. Rotating...`);
           if (this.notifyCallback) {
-            this.notifyCallback(`⏱️ TIMEOUT: ${provider.name} slow\n\n🔄 Rotating to next provider...`);
+            this.notifyCallback(`⏱️ TIMEOUT: ${provider.name}`);
           }
-          
           this.rotateProvider();
         } else {
-          console.log(`⚠️ Error occurred. Trying next provider...`);
+          console.log(`⚠️ Error on ${provider.name}. Trying next...`);
           this.rotateProvider();
         }
       }
