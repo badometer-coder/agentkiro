@@ -31,8 +31,6 @@ const llmProvider = new MultiLLMProvider(process.env, notifyRateLimit);
 // Initialize Memory Manager
 const memory = new MemoryManager(process.env);
 
-import express from 'express';
-
 const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
 
 const APP_REQUIREMENTS = `
