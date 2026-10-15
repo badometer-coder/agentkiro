@@ -1,0 +1,29 @@
+services:
+  - type: worker
+    name: agent-swarm
+    runtime: node
+    plan: free
+    startCommand: cd swarm && node agent-coordinator.js
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_API_KEY_2
+        sync: false
+      - key: GROQ_API_KEY_3
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: SUPABASE_ADMIN_KEY
+        sync: false
+      - key: PROJECT_PATH
+        sync: false
+      - key: GIT_USER_NAME
+        sync: false
+      - key: GIT_USER_EMAIL
+        sync: false
