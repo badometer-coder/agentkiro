@@ -60,8 +60,8 @@ PROXIMITY SOCIAL APP - DEVELOPMENT REQUIREMENTS
 let taskQueue = [];
 let currentTask = null;
 let taskLog = [];
+let conversationHistory = []; // Remember last 10 messages
 
-async function createExecutionPlan() {
 async function createExecutionPlan(topic = null) {
   try {
     console.log('📋 Project Manager: Creating execution plan...');
@@ -596,60 +596,64 @@ bot.on('text', async (ctx) => {
     // --- LLM handles everything else (including "make a change on login", "plan about X", etc.) ---
     const stats = memory.getStats();
     const taskPreview = taskQueue.slice(0, 5).map((t, i) => `${i+1}. ${t.substring(0, 80)}`).join('\n');
-    const completedPreview = taskLog.slice(-3).map((t, i) => `${i+1}. ${(t.task||'').substring(0, 80)}`).join('\n');
+
+    // Add to conversation history for context
+    conversationHistory.push({ role: 'user', content: raw });
+    if (conversationHistory.length > 10) conversationHistory = conversationHistory.slice(-10);
 
     const llmReply = await llmProvider.callLLM([
       {
         role: 'system',
         content: `You are an autonomous AI dev agent building the Proximity Social App (React Native + TypeScript).
 
-CURRENT STATE:
-- Tasks queued: ${taskQueue.length}
-- Tasks completed: ${taskLog.length}
-${taskQueue.length > 0 ? `\nNext queued tasks:\n${taskPreview}` : '\nNo tasks queued.'}
-${taskLog.length > 0 ? `\nRecently completed:\n${completedPreview}` : ''}
+CURRENT STATE: ${taskQueue.length} tasks queued, ${taskLog.length} done.
+${taskQueue.length > 0 ? `Next tasks:\n${taskPreview}` : 'No tasks queued.'}
 
-YOUR JOB: Respond naturally AND tell the user what action you're taking.
+CRITICAL: You MUST use action tags whenever user wants something done:
+- User asks to build/change/fix/improve/make anything → [DOTASK: full task description with file path]
+- User says "go ahead", "do it", "please", "yes", "continue", "sure" → [DOTASK: repeat what they asked for before]
+- User asks to plan something specific → [DOPLAN: topic]
+- User asks to run N tasks → [RUN: N]
+- Pure chat only → no tags
 
-If the user asks you to:
-- Make/change/build something specific → say you'll do it and end your reply with: [DOTASK: description of the specific task]
-- Make a plan about something → say you'll plan it and end with: [DOPLAN: topic]
-- Run N tasks → end with: [RUN: N]
-- Just chat → just chat, no tags
+IMPORTANT: If user is following up on a previous request (like "go ahead" or "please"), look at conversation history and repeat the last task they asked for.
 
-Keep reply under 80 words.`,
+Reply under 50 words then add the tag.`,
       },
-      { role: 'user', content: raw },
-    ], { temperature: 0.7, max_tokens: 200 });
+      ...conversationHistory,
+    ], { temperature: 0.5, max_tokens: 200 });
 
-    // Parse action from LLM reply
+    // Add to history
+    conversationHistory.push({ role: 'assistant', content: llmReply });
+
+    // Parse action tags
     const cleanReply = llmReply.replace(/\[(DOTASK|DOPLAN|RUN):[^\]]*\]/g, '').trim();
     const taskMatch = llmReply.match(/\[DOTASK:\s*([^\]]+)\]/);
     const planMatch = llmReply.match(/\[DOPLAN:\s*([^\]]+)\]/);
     const runMatch2 = llmReply.match(/\[RUN:\s*(\d+)\]/);
 
-    // Send the reply first
     if (cleanReply) await ctx.reply(cleanReply);
 
-    // Then execute the action
     if (taskMatch) {
       const specificTask = taskMatch[1].trim();
-      await ctx.reply(`⚙️ Working on: ${specificTask}`);
+      await ctx.reply(`⚙️ Working on it...`);
       const result = await executeTask(specificTask);
       if (result) {
-        taskLog.push({ task: specificTask, result });
         memory.recordTaskCompletion(specificTask, true, result, llmProvider.getCurrentProvider().name, 0);
-        await ctx.reply(`✅ Done! Here's what I built:\n\n${result.substring(0, 800)}${result.length > 800 ? '\n...(truncated)' : ''}`);
+        const preview = result.substring(0, 600);
+        await ctx.reply(`✅ Done!\n\n${preview}${result.length > 600 ? '\n...(full code saved)' : ''}`);
+      } else {
+        await ctx.reply(`❌ Couldn't complete that task. Try being more specific.`);
       }
     } else if (planMatch) {
       const topic = planMatch[1].trim();
       await ctx.reply(`📋 Creating plan for: ${topic}`);
       const tasks = await createExecutionPlan(topic);
       taskQueue = tasks;
-      await ctx.reply(`✅ Created ${tasks.length} tasks for "${topic}"!\n\nFirst 5:\n${tasks.slice(0,5).map((t,i)=>`${i+1}. ${t.substring(0,80)}`).join('\n')}\n\nSay "run 5 tasks" or "go ahead" to start!`);
+      await ctx.reply(`✅ ${tasks.length} tasks created!\n\nFirst 5:\n${tasks.slice(0,5).map((t,i)=>`${i+1}. ${t.substring(0,80)}`).join('\n')}\n\nSay "go ahead" to start!`);
     } else if (runMatch2) {
       const count = parseInt(runMatch2[1]);
-      if (taskQueue.length === 0) return ctx.reply('❌ No tasks queued. Tell me what to build first!');
+      if (taskQueue.length === 0) return ctx.reply('❌ No tasks queued.');
       return runTasks(ctx, count);
     }
 
