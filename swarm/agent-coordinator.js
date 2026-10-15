@@ -723,61 +723,20 @@ bot.use((ctx, next) => {
 });
 
 console.log('🤖 Agent Coordinator Started');
-console.log('📱 Setting up Telegram bot (webhook mode)...\n');
+console.log('📱 Listening for Telegram messages...\n');
 
-// Start Telegram bot with webhook (avoids polling conflicts)
+// Start Telegram bot with polling
 async function startBot() {
   try {
-    // Use webhook instead of polling to avoid 409 conflicts
-    const webhookUrl = process.env.WEBHOOK_URL || `${process.env.RENDER_URL || 'https://agent-swarm-ceti.onrender.com'}/webhook`;
-    
-    console.log(`🔗 Setting webhook: ${webhookUrl}`);
-    
-    // Remove old webhook first
-    try {
-      await bot.telegram.deleteWebhook();
-      console.log('✅ Old webhook removed');
-    } catch (e) {
-      // Ignore if no webhook exists
-    }
-    
-    // Set new webhook
-    await bot.telegram.setWebhook(webhookUrl);
-    console.log('✅ Webhook registered with Telegram');
-    
-    // Start HTTP server for webhook
-    const app = express();
-    app.use(express.json());
-    
-    app.post('/webhook', (req, res) => {
-      bot.handleUpdate(req.body, res);
+    await bot.launch({
+      dropPendingUpdates: true,
+      allowedUpdates: ['message']
     });
-    
-    app.get('/health', (req, res) => {
-      res.json({ status: 'ok', timestamp: new Date() });
-    });
-    
-    const PORT = process.env.PORT || 3000;
-    app.listen(PORT, () => {
-      console.log(`✅ Webhook server listening on port ${PORT}`);
-      console.log('✅ Telegram bot ready (webhook mode)');
-    });
-    
+    console.log('✅ Telegram bot launched (polling mode)');
   } catch (error) {
-    console.error('❌ Failed to setup webhook:', error.message);
-    console.error('   Falling back to polling...');
-    
-    // Fallback to polling
-    try {
-      await bot.launch({
-        dropPendingUpdates: true
-      });
-      console.log('✅ Telegram bot launched (polling mode)');
-    } catch (pollError) {
-      console.error('❌ Polling also failed:', pollError.message);
-      console.error('   Will retry in 10 seconds...');
-      setTimeout(startBot, 10000);
-    }
+    console.error('❌ Failed to launch Telegram bot:', error.message);
+    console.error('   Retrying in 15 seconds...');
+    setTimeout(startBot, 15000);
   }
 }
 
@@ -797,7 +756,6 @@ process.once('SIGTERM', () => {
 // Global error handler to prevent crashes
 process.on('uncaughtException', (error) => {
   console.error('❌ Uncaught Exception:', error.message);
-  console.error(error.stack);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
