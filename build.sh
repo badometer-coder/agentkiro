@@ -6,17 +6,27 @@ echo "🚀 Building Agent Swarm for Render..."
 # Install dependencies
 npm install
 
-# Clone Proximity app using SSH key or token
-PROXIMITY_REPO="git@github.com:badometer-coder/proximity-app.git"
+# Clone Proximity app using HTTPS token
 PROXIMITY_PATH="/opt/render/project/proximity-app"
+GITHUB_TOKEN="${GITHUB_TOKEN:-}"
+REPO="badometer-coder/proximity-app"
 
-if [ ! -d "$PROXIMITY_PATH/.git" ]; then
-  echo "📦 Cloning Proximity app..."
-  git clone "$PROXIMITY_REPO" "$PROXIMITY_PATH" || echo "⚠️ Could not clone - will try at runtime"
+if [ -n "$GITHUB_TOKEN" ]; then
+  CLONE_URL="https://${GITHUB_TOKEN}@github.com/${REPO}.git"
+  
+  if [ ! -d "$PROXIMITY_PATH/.git" ]; then
+    echo "📦 Cloning Proximity app..."
+    git clone "$CLONE_URL" "$PROXIMITY_PATH" && echo "✅ Cloned successfully" || echo "⚠️ Clone failed"
+  else
+    echo "📦 Pulling latest Proximity app..."
+    cd "$PROXIMITY_PATH"
+    git remote set-url origin "$CLONE_URL"
+    git pull origin main || echo "⚠️ Pull failed"
+    cd /opt/render/project/src
+  fi
 else
-  echo "📦 Proximity app already cloned"
-  cd "$PROXIMITY_PATH" && git pull origin main || echo "⚠️ Could not pull latest"
-  cd /opt/render/project/src
+  echo "⚠️ GITHUB_TOKEN not set - skipping clone"
+  mkdir -p "$PROXIMITY_PATH"
 fi
 
 echo "✅ Build complete!"

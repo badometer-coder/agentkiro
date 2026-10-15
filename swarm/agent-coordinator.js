@@ -222,16 +222,23 @@ START WITH "File:" and show COMPLETE working code.`,
     // === AUTO-COMMIT TO GITHUB ===
     if (savedFiles.length > 0) {
       const appPath = process.env.PROJECT_PATH || '/opt/render/project/proximity-app';
+      const githubToken = process.env.GITHUB_TOKEN;
       try {
         const { execSync } = await import('child_process');
-        execSync(`cd "${appPath}" && git config user.email "agent@proximity.app" && git config user.name "AI Agent"`, { stdio: 'pipe' });
-        execSync(`cd "${appPath}" && git add -A`, { stdio: 'pipe' });
-        const commitMsg = `AI: ${taskDescription.substring(0, 60)}`;
-        execSync(`cd "${appPath}" && git commit -m "${commitMsg}"`, { stdio: 'pipe' });
-        execSync(`cd "${appPath}" && git push origin main`, { stdio: 'pipe' });
+        // Configure git
+        execSync(`git -C "${appPath}" config user.email "agent@proximity.app"`, { stdio: 'pipe' });
+        execSync(`git -C "${appPath}" config user.name "AI Agent"`, { stdio: 'pipe' });
+        // Set remote with token if available
+        if (githubToken) {
+          execSync(`git -C "${appPath}" remote set-url origin https://${githubToken}@github.com/badometer-coder/proximity-app.git`, { stdio: 'pipe' });
+        }
+        execSync(`git -C "${appPath}" add -A`, { stdio: 'pipe' });
+        const commitMsg = `AI: ${taskDescription.substring(0, 60).replace(/"/g, "'")}`;
+        execSync(`git -C "${appPath}" commit -m "${commitMsg}"`, { stdio: 'pipe' });
+        execSync(`git -C "${appPath}" push origin main`, { stdio: 'pipe' });
         console.log(`✅ Committed and pushed ${savedFiles.length} file(s) to GitHub`);
       } catch (gitError) {
-        console.log(`⚠️ Git commit failed: ${gitError.message}`);
+        console.log(`⚠️ Git commit failed: ${gitError.message.split('\n')[0]}`);
       }
     }
 
