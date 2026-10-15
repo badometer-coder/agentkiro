@@ -347,9 +347,9 @@ OUTPUT: Modified file(s) only. Start each with "File: <path>" then the complete 
     try {
       result = await Promise.race([
         llmProvider.callLLM(messages, {
-          temperature: 0.7,
-          max_tokens: 900,
-          timeout: 6 * 60 * 1000, // 6 minute timeout
+          temperature: 0.3,
+          max_tokens: 3000,  // Increased — files must not be truncated
+          timeout: 6 * 60 * 1000,
         }),
         new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Task execution timeout - took too long')), 7 * 60 * 1000) // 7 minute hard limit
@@ -412,6 +412,13 @@ OUTPUT: Modified file(s) only. Start each with "File: <path>" then the complete 
       const code = codeBlock.trim();
       if (code.length < 10) continue; // Skip empty blocks
 
+      // Reject truncated files — must end with a closing brace or semicolon
+      const lastChar = code[code.length - 1];
+      if (lastChar !== '}' && lastChar !== ';' && lastChar !== ')') {
+        console.log(`⚠️ Skipping ${cleanPath} — looks truncated (ends with: "${code.slice(-20)}")`);
+        continue;
+      }
+
       const fullPath = path.join(appPath, cleanPath);
 
       console.log(`💾 Saving to: ${fullPath}`);
@@ -449,9 +456,10 @@ OUTPUT: Modified file(s) only. Start each with "File: <path>" then the complete 
         break;
       }
 
-      if (testResults.errors.length === 0) {
-        console.log(`⚠️ Tests inconclusive. Continuing...`);
-        testPassed = true; // Assume pass if no specific errors
+      // Real errors found — must debug, never skip
+      if (testResults.errors.length === 0 && !testResults.output.includes('error TS')) {
+        console.log(`⚠️ Tests inconclusive (no tsc available). Continuing...`);
+        testPassed = true;
         break;
       }
 
