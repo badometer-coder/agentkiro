@@ -276,50 +276,70 @@ async function notifyTaskStatus(ctx, taskName, status, details = '') {
   }
 }
 
+// Read current file contents from the project so the LLM knows the real code
+function readProjectFiles(appPath) {
+  const filesToRead = [
+    'App.tsx',
+    'src/constants/theme.ts',
+    'src/screens/auth/LoginScreen.tsx',
+    'src/screens/auth/ProfileSetupScreen.tsx',
+    'src/screens/main/ProximityFeedScreen.tsx',
+    'src/screens/main/ChatThreadScreen.tsx',
+  ];
+
+  let context = '';
+  for (const relPath of filesToRead) {
+    const fullPath = path.join(appPath, relPath);
+    try {
+      const content = fs.readFileSync(fullPath, 'utf-8');
+      context += `\n\n=== CURRENT FILE: ${relPath} ===\n${content}`;
+    } catch {
+      // file doesn't exist, skip
+    }
+  }
+
+  // Also read package.json so LLM knows what packages are available
+  try {
+    const pkg = fs.readFileSync(path.join(appPath, 'package.json'), 'utf-8');
+    context += `\n\n=== package.json (ONLY use packages listed here) ===\n${pkg}`;
+  } catch { /* skip */ }
+
+  return context;
+}
+
 async function executeTask(taskDescription, ctx = null) {
   try {
     const stats = llmProvider.getStats();
     console.log(`💻 Dev Agent: Executing task (Provider: ${stats.currentProvider})...`);
+
+    const appPath = process.env.PROJECT_PATH || '/opt/render/project/proximity-app';
+    const currentFiles = readProjectFiles(appPath);
+    console.log(`📂 Read existing project files for context`);
     
     const messages = [
       {
         role: 'system',
         content: `YOU ARE A CODE GENERATOR FOR REACT NATIVE + TYPESCRIPT.
 
-STRICT REQUIREMENTS:
-1. ALWAYS provide COMPLETE, RUNNABLE CODE. NO outlines. NO "pseudo-code". NO "here's how you would".
-2. ALWAYS specify exact file paths: "File: src/screens/Chat.tsx" or "File: src/hooks/useLocation.ts"
-3. ALWAYS include ALL imports and exports
-4. ALWAYS include full TypeScript types
-5. ALWAYS include error handling
-6. ALWAYS include comments explaining key logic
-7. ALWAYS provide a test case or usage example
+STRICT RULES - READ CAREFULLY:
+1. ONLY modify files shown in "CURRENT FILE" sections below. Do NOT invent new imports.
+2. ONLY use packages that exist in package.json. NEVER import a package not listed there.
+3. ALWAYS keep the existing import style and structure of each file.
+4. ALWAYS provide COMPLETE file content — no truncation, no "// rest stays the same".
+5. ALWAYS start each file with: File: <path>
+6. NO markdown fences (no \`\`\`typescript, no \`\`\`). Raw code only.
+7. NO explanations before or after the code.
 
-IF YOU CANNOT PROVIDE COMPLETE CODE, RESPOND WITH:
-"INCOMPLETE: [reason]. I need more context about [specific detail]."
-
-Do NOT provide outlines, suggestions, or incomplete snippets.
-Do NOT say "you would" or "you could" or "add this".
-Do NOT ask for clarification.
-
-PROVIDE READY-TO-USE CODE OR SAY YOU CAN'T.`,
+IF YOU CANNOT DO THE TASK: respond "INCOMPLETE: <reason>"`,
       },
       {
         role: 'user',
-        content: `IMPLEMENT THIS TASK:
+        content: `TASK: ${taskDescription}
 
-${taskDescription}
+CURRENT PROJECT FILES (read these before writing anything):
+${currentFiles}
 
-REQUIREMENTS CONTEXT:
-${APP_REQUIREMENTS}
-
-PROVIDE:
-- File paths to create or modify
-- Complete code (all imports, all exports, all types)
-- Error handling
-- Test/usage example
-
-START WITH "File:" and show COMPLETE working code.`,
+OUTPUT: Modified file(s) only. Start each with "File: <path>" then the complete file content. No markdown fences.`,
       },
     ];
 
@@ -392,7 +412,6 @@ START WITH "File:" and show COMPLETE working code.`,
       const code = codeBlock.trim();
       if (code.length < 10) continue; // Skip empty blocks
 
-      const appPath = process.env.PROJECT_PATH || '/opt/render/project/proximity-app';
       const fullPath = path.join(appPath, cleanPath);
 
       console.log(`💾 Saving to: ${fullPath}`);
@@ -415,7 +434,7 @@ START WITH "File:" and show COMPLETE working code.`,
     }
 
     // === RUN TESTS AND AUTO-DEBUG ===
-    const appPath = process.env.PROJECT_PATH || '/opt/render/project/proximity-app';
+    // appPath already declared above
     let testPassed = false;
     let debugAttempts = 0;
     const maxDebugAttempts = 3;
