@@ -718,20 +718,62 @@ bot.use((ctx, next) => {
 });
 
 console.log('🤖 Agent Coordinator Started');
-console.log('📱 Listening for Telegram messages...\n');
+console.log('📱 Setting up Telegram bot (webhook mode)...\n');
 
-// Start Telegram bot with error handling
+// Start Telegram bot with webhook (avoids polling conflicts)
 async function startBot() {
   try {
-    await bot.launch({
-      dropPendingUpdates: true
+    // Use webhook instead of polling to avoid 409 conflicts
+    const webhookUrl = process.env.WEBHOOK_URL || `${process.env.RENDER_URL || 'https://agent-swarm-ceti.onrender.com'}/webhook`;
+    
+    console.log(`🔗 Setting webhook: ${webhookUrl}`);
+    
+    // Remove old webhook first
+    try {
+      await bot.telegram.deleteWebhook();
+      console.log('✅ Old webhook removed');
+    } catch (e) {
+      // Ignore if no webhook exists
+    }
+    
+    // Set new webhook
+    await bot.telegram.setWebhook(webhookUrl);
+    console.log('✅ Webhook registered with Telegram');
+    
+    // Start health server for webhook
+    const express = require('express');
+    const app = express();
+    app.use(express.json());
+    
+    app.post('/webhook', (req, res) => {
+      bot.handleUpdate(req.body, res);
     });
-    console.log('✅ Telegram bot launched successfully');
+    
+    app.get('/health', (req, res) => {
+      res.json({ status: 'ok', timestamp: new Date() });
+    });
+    
+    const PORT = process.env.PORT || 3000;
+    app.listen(PORT, () => {
+      console.log(`✅ Webhook server listening on port ${PORT}`);
+      console.log('✅ Telegram bot ready (webhook mode)');
+    });
+    
   } catch (error) {
-    console.error('❌ Failed to launch Telegram bot:', error.message);
-    console.error('   Bot will retry polling...');
-    // Don't crash - continue running
-    setTimeout(startBot, 5000); // Retry after 5 seconds
+    console.error('❌ Failed to setup webhook:', error.message);
+    console.error('   Falling back to polling...');
+    
+    // Fallback to polling
+    try {
+      await bot.launch({
+        dropPendingUpdates: true
+      });
+      console.log('✅ Telegram bot launched (polling mode)');
+    } catch (pollError) {
+      console.error('❌ Polling also failed:', pollError.message);
+      console.error('   Will retry in 10 seconds...');
+      setTimeout(startBot, 10000);
+    }
   }
 }
 
@@ -752,10 +794,8 @@ process.once('SIGTERM', () => {
 process.on('uncaughtException', (error) => {
   console.error('❌ Uncaught Exception:', error.message);
   console.error(error.stack);
-  // Continue running instead of crashing
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
-  // Continue running instead of crashing
+  console.error('❌ Unhandled Rejection:', reason);
 });
