@@ -251,6 +251,9 @@ START WITH "File:" and show COMPLETE working code.`,
       const codeMatch = codeBlock.match(/```(?:typescript|tsx|ts|javascript|jsx|js)?\n?([\s\S]*?)```/);
       if (codeMatch) codeBlock = codeMatch[1];
 
+      // Strip any remaining markdown fences
+      codeBlock = codeBlock.replace(/^```[\w]*\n?/gm, '').replace(/^```\n?/gm, '');
+
       const code = codeBlock.trim();
       if (code.length < 10) continue; // Skip empty blocks
 
