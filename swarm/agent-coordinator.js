@@ -553,6 +553,11 @@ bot.on('text', async (ctx) => {
       : 'Task queue is empty.';
     const completedInfo = `Completed tasks this session: ${taskLog.length}`;
     
+    // Show the actual task list so agent knows what's planned
+    const taskListPreview = taskQueue.length > 0
+      ? `\nFIRST 10 PLANNED TASKS:\n${taskQueue.slice(0, 10).map((t, i) => `${i+1}. ${t.substring(0, 120)}`).join('\n')}`
+      : '';
+    
     // Let the LLM respond conversationally AND decide what to do
     const agentResponse = await llmProvider.callLLM([
       {
@@ -563,20 +568,23 @@ CURRENT STATE:
 - ${queueInfo}
 - ${completedInfo}
 - Memory: ${stats.tasksCompleted} tasks completed total, ${stats.tasksFailed} failed
+${taskListPreview}
 
-YOU CAN:
-1. Chat naturally with the user
-2. Trigger actions by including these EXACT tags in your response:
-   [ACTION:PLAN] - create a new development plan
+COMPLETED TASKS THIS SESSION:
+${taskLog.length > 0 ? taskLog.slice(-5).map((t, i) => `${i+1}. ${(t.task||'').substring(0, 100)}`).join('\n') : 'None yet'}
+
+YOU CAN trigger actions by including these EXACT tags in your response:
+   [ACTION:PLAN] - create a new development plan (only if user explicitly asks)
    [ACTION:RUN:N] - run N tasks (replace N with number, e.g. [ACTION:RUN:5])
    [ACTION:RUN_ALL] - run all tasks
    [ACTION:STATUS] - show status
 
 RULES:
-- Only add an action tag if the user EXPLICITLY asks you to do something (run tasks, make a plan, etc.)
-- If user just says "hey", "hi", "hello" or is just chatting, just chat back - NO action tags
+- Only add an action tag if the user EXPLICITLY asks you to do something
+- If user asks about the tasks/plan, answer from the task list above - do NOT re-plan
+- If user says "hey", "hi" or chats casually, just chat back - NO action tags
 - Be helpful, friendly and concise
-- Keep responses under 100 words`,
+- Keep responses under 150 words`,
       },
       {
         role: 'user',
