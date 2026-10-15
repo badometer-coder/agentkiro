@@ -522,8 +522,7 @@ Do not explain. Just write the word.`,
     const intent = response.trim().toUpperCase();
     console.log(`🧠 Intent raw response: "${response}"`);
     console.log(`🧠 Intent parsed: "${intent}"`);
-    
-    // Extract first valid intent if wrapped in text
+    console.log(`🧠 Response length: ${response.length}, Type: ${typeof response}`);
     if (intent.includes('PLAN')) return 'PLAN';
     if (intent.includes('RUN_ALL') || intent.includes('RUN ALL')) return 'RUN_ALL';
     if (intent.includes('EXECUTE_N')) return 'EXECUTE_N';
