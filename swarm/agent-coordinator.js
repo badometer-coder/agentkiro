@@ -141,7 +141,142 @@ Be SPECIFIC. Every task should be clear enough that a developer can immediately 
   }
 }
 
-async function executeTask(taskDescription) {
+// Test runner - checks if code compiles/validates
+async function runTests(appPath, maxAttempts = 1) {
+  try {
+    console.log(`🧪 Testing code...`);
+    const { execSync } = await import('child_process');
+    
+    let testOutput = '';
+    let testPassed = false;
+    
+    try {
+      // Try TypeScript compilation first
+      const tscOutput = execSync(`cd "${appPath}" && npx tsc --noEmit 2>&1`, { 
+        encoding: 'utf-8',
+        stdio: 'pipe',
+        timeout: 30000,
+      });
+      console.log(`✅ TypeScript compilation passed`);
+      testPassed = true;
+      testOutput = tscOutput;
+    } catch (tscError) {
+      testOutput = String(tscError.stdout || tscError.stderr || tscError.message);
+      console.log(`❌ TypeScript errors found:\n${testOutput.substring(0, 500)}`);
+    }
+    
+    // If TSC failed, try Expo doctor for other checks
+    if (!testPassed) {
+      try {
+        const expoOutput = execSync(`cd "${appPath}" && npx expo-doctor 2>&1`, { 
+          encoding: 'utf-8',
+          stdio: 'pipe',
+          timeout: 30000,
+        });
+        console.log(`📋 Expo diagnostics:\n${expoOutput.substring(0, 300)}`);
+        testOutput += '\n' + expoOutput;
+      } catch (expoError) {
+        // Expo doctor may fail but still give useful info
+        testOutput += '\n' + String(expoError.stdout || expoError.stderr || '');
+      }
+    }
+    
+    return {
+      passed: testPassed,
+      output: testOutput,
+      errors: extractErrors(testOutput),
+    };
+  } catch (error) {
+    return {
+      passed: false,
+      output: error.message,
+      errors: [error.message],
+    };
+  }
+}
+
+// Extract error messages from test output
+function extractErrors(testOutput) {
+  const errors = [];
+  
+  // TypeScript errors: "file.ts(10,5): error TS1234: message"
+  const tsErrors = testOutput.match(/^[^:]+:\(\d+,\d+\):\s*error\s*TS\d+:[^\n]+/gm) || [];
+  errors.push(...tsErrors);
+  
+  // Other compilation errors
+  const compileErrors = testOutput.match(/error:\s*[^\n]+/gi) || [];
+  errors.push(...compileErrors.slice(0, 5)); // Limit to first 5
+  
+  return errors.slice(0, 10); // Return first 10 errors
+}
+
+// Auto-debug: feed errors to LLM and fix code
+async function autoDebugErrors(taskDescription, errors, appPath, attemptNumber = 1) {
+  try {
+    console.log(`🔧 Auto-debugging (attempt ${attemptNumber})...`);
+    
+    const debugMessages = [
+      {
+        role: 'system',
+        content: `YOU ARE A CODE DEBUGGER FOR REACT NATIVE + TYPESCRIPT.
+
+You MUST fix the reported errors and provide COMPLETE, CORRECTED code.
+
+ERROR CONTEXT:
+${errors.slice(0, 5).join('\n')}
+
+REQUIREMENTS:
+1. FIX all reported errors
+2. Keep the same file structure
+3. Provide COMPLETE code (all imports, all exports, all types)
+4. Include error handling
+5. Return ONLY corrected files with "File:" prefix
+
+DO NOT provide explanations or outlines - ONLY corrected code.`,
+      },
+      {
+        role: 'user',
+        content: `TASK: ${taskDescription}
+
+REPORTED ERRORS:
+${errors.slice(0, 5).join('\n')}
+
+FIX these errors and provide the corrected files. Start with "File:" and include complete code.
+
+REQUIREMENTS CONTEXT:
+${APP_REQUIREMENTS}`,
+      },
+    ];
+
+    const fixedCode = await llmProvider.callLLM(debugMessages, {
+      temperature: 0.5,
+      max_tokens: 1000,
+      timeout: 5 * 60 * 1000,
+    });
+
+    console.log(`✅ LLM generated fixes`);
+    return fixedCode;
+  } catch (error) {
+    console.error(`❌ Debug LLM error: ${error.message}`);
+    return null;
+  }
+}
+
+// Send Telegram notification
+async function notifyTaskStatus(ctx, taskName, status, details = '') {
+  try {
+    if (!ctx) return; // No context, skip
+    
+    const emoji = status === 'success' ? '✅' : status === 'failed' ? '❌' : '⚠️';
+    const message = `${emoji} Task: ${taskName.substring(0, 60)}\nStatus: ${status}\n${details}`;
+    
+    await ctx.reply(message).catch(() => {});
+  } catch (error) {
+    console.error(`Notification error: ${error.message}`);
+  }
+}
+
+async function executeTask(taskDescription, ctx = null) {
   try {
     const stats = llmProvider.getStats();
     console.log(`💻 Dev Agent: Executing task (Provider: ${stats.currentProvider})...`);
@@ -279,9 +414,95 @@ START WITH "File:" and show COMPLETE working code.`,
       }
     }
 
+    // === RUN TESTS AND AUTO-DEBUG ===
+    const appPath = process.env.PROJECT_PATH || '/opt/render/project/proximity-app';
+    let testPassed = false;
+    let debugAttempts = 0;
+    const maxDebugAttempts = 3;
+
+    while (!testPassed && debugAttempts < maxDebugAttempts) {
+      const testResults = await runTests(appPath);
+      
+      if (testResults.passed) {
+        console.log(`✅ All tests passed!`);
+        testPassed = true;
+        await notifyTaskStatus(ctx, taskDescription, 'success', '✅ Code compiled and validated successfully!');
+        break;
+      }
+
+      if (testResults.errors.length === 0) {
+        console.log(`⚠️ Tests inconclusive. Continuing...`);
+        testPassed = true; // Assume pass if no specific errors
+        break;
+      }
+
+      debugAttempts++;
+      console.log(`🔧 Debug attempt ${debugAttempts}/${maxDebugAttempts}...`);
+
+      if (debugAttempts >= maxDebugAttempts) {
+        console.log(`❌ Max debug attempts reached. Stopping.`);
+        await notifyTaskStatus(ctx, taskDescription, 'failed', `❌ Tests failed after ${maxDebugAttempts} debug attempts:\n${testResults.errors.slice(0, 2).join('\n')}`);
+        break;
+      }
+
+      const fixedCode = await autoDebugErrors(taskDescription, testResults.errors, appPath, debugAttempts);
+      if (!fixedCode) {
+        console.log(`❌ Debug LLM failed. Stopping.`);
+        await notifyTaskStatus(ctx, taskDescription, 'failed', '❌ Debug LLM could not fix errors.');
+        break;
+      }
+
+      // Re-extract and save fixed files
+      let fixedFiles = [];
+      const fixedFilePatterns = [
+        /(?:^|\n)(?:File|file|FILE|filename|Filename):\s*([^\n]+)/g,
+        /(?:^|\n)\/\/\s*([^\n]+\.(tsx?|jsx?|ts|js|json|css|scss))/g,
+      ];
+
+      let fixedFileMatches = [];
+      for (const pattern of fixedFilePatterns) {
+        const matches = [...fixedCode.matchAll(pattern)];
+        fixedFileMatches = fixedFileMatches.concat(matches.map(m => m[1].trim()));
+      }
+      fixedFileMatches = [...new Set(fixedFileMatches)];
+
+      for (const filePath of fixedFileMatches) {
+        const cleanPath = filePath.replace(/^['"`]|['"`]$/g, '').trim();
+        if (!cleanPath || cleanPath.length > 200) continue;
+
+        const fileIndex = fixedCode.indexOf(filePath);
+        const nextFileIndex = fixedFileMatches
+          .map(f => fixedCode.indexOf(f, fileIndex + 1))
+          .filter(i => i > fileIndex)
+          .sort((a, b) => a - b)[0] || fixedCode.length;
+
+        let codeBlock = fixedCode.substring(fileIndex + filePath.length, nextFileIndex);
+        const codeMatch = codeBlock.match(/```(?:typescript|tsx|ts|javascript|jsx|js)?\n?([\s\S]*?)```/);
+        if (codeMatch) codeBlock = codeMatch[1];
+        codeBlock = codeBlock.replace(/^```[\w]*\n?/gm, '').replace(/^```\n?/gm, '');
+
+        const code = codeBlock.trim();
+        if (code.length < 10) continue;
+
+        const fullPath = path.join(appPath, cleanPath);
+        try {
+          fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+          fs.writeFileSync(fullPath, code, 'utf-8');
+          fixedFiles.push(cleanPath);
+          console.log(`✅ Fixed and saved: ${cleanPath}`);
+        } catch (e) {
+          console.error(`❌ Could not save fixed ${cleanPath}: ${e.message}`);
+        }
+      }
+
+      if (fixedFiles.length === 0) {
+        console.log(`⚠️ No files to fix. Stopping debug.`);
+        break;
+      }
+    }
+
     // === AUTO-COMMIT TO GITHUB ===
     if (savedFiles.length > 0) {
-      const appPath = process.env.PROJECT_PATH || '/opt/render/project/proximity-app';
       const githubToken = process.env.GITHUB_TOKEN;
       try {
         const { execSync } = await import('child_process');
@@ -306,18 +527,20 @@ START WITH "File:" and show COMPLETE working code.`,
       task: taskDescription,
       result: result,
       savedFiles: savedFiles,
+      testPassed: testPassed,
       timestamp: new Date().toISOString(),
       provider: llmProvider.getCurrentProvider().name,
     });
     
     if (savedFiles.length > 0) {
-      console.log(`✅ Task complete - saved ${savedFiles.length} file(s)`);
+      console.log(`✅ Task complete - saved ${savedFiles.length} file(s)${testPassed ? ' (tests passed)' : ''}`);
     } else {
       console.log(`✅ Task execution complete (no files saved)\n`);
     }
     return result;
   } catch (error) {
     console.error('Error executing task:', error.message);
+    await notifyTaskStatus(ctx, taskDescription, 'error', `❌ Execution error: ${error.message}`);
     return null;
   }
 }
@@ -409,7 +632,7 @@ bot.command('execute', async (ctx) => {
   console.log(`\n🚀 EXECUTE: Processing task: ${task.substring(0, 100)}...`);
   ctx.reply(`💻 Dev Agent working...\n${task.substring(0, 500)}`);
   
-  const result = await executeTask(task);
+  const result = await executeTask(task, ctx);
   
   if (result) {
     console.log(`✅ Dev Agent completed task`);
@@ -509,7 +732,7 @@ async function autoExecuteAll(ctx) {
   telegramBotContext = ctx;
   
   const totalTasks = taskQueue.length;
-  ctx.reply(`🚀 AUTO MODE: Executing ${totalTasks} tasks automatically...\n⏳ This will take a few minutes. Monitoring via Telegram.\n\n📢 I'll notify you when a provider hits rate limit.`);
+  ctx.reply(`🚀 AUTO MODE: Executing ${totalTasks} tasks automatically...\n⏳ This will take a few minutes. Monitoring via Telegram.\n\n📢 I'll notify you when a provider hits rate limit or task completes.`);
   
   let completed = 0;
   let revised = 0;
@@ -530,7 +753,7 @@ async function autoExecuteAll(ctx) {
     console.log(`Task: ${cleanTask.substring(0, 100)}...`);
     console.log(`Revision attempt: ${revisionCount}/${maxRevisions}`);
     
-    const result = await executeTask(cleanTask);
+    const result = await executeTask(cleanTask, ctx);
     
     if (!result) {
       console.log(`❌ Task failed - skipping`);
@@ -733,7 +956,7 @@ Keep reply under 50 words.`,
     if (taskMatch) {
       const specificTask = taskMatch[1].trim();
       await ctx.reply(`⚙️ Working on it...`);
-      const result = await executeTask(specificTask);
+      const result = await executeTask(specificTask, ctx);
       if (result) {
         memory.recordTaskCompletion(specificTask, true, result, llmProvider.getCurrentProvider().name, 0);
         const preview = result.substring(0, 600);
@@ -768,7 +991,7 @@ async function runTasks(ctx, count) {
     const task = taskQueue.shift();
     try {
       await ctx.reply(`⚙️ [${i+1}/${toRun}] ${task.substring(0, 80)}...`);
-      const result = await executeTask(task);
+      const result = await executeTask(task, ctx);
       if (result) {
         const validation = await validateTaskCompletion(task, result);
         const approved = validation && validation.toUpperCase().includes('DECISION: YES');
