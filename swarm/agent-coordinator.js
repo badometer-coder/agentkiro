@@ -31,6 +31,8 @@ const llmProvider = new MultiLLMProvider(process.env, notifyRateLimit);
 // Initialize Memory Manager
 const memory = new MemoryManager(process.env);
 
+import express from 'express';
+
 const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
 
 const APP_REQUIREMENTS = `
@@ -496,15 +498,16 @@ async function classifyUserIntent(message) {
     const response = await llmProvider.callLLM([
       {
         role: 'system',
-        content: `What does the user want? Answer with ONE word only.
+        content: `What does the user want? Answer with ONLY ONE of these words:
+PLAN
+RUN_ALL
+EXECUTE_N
+EXECUTE_ONE
+STATUS
+MEMORY
+HELP
 
-PLAN - generate tasks
-RUN_ALL - run all tasks
-EXECUTE_N - run N tasks
-EXECUTE_ONE - run 1 task
-STATUS - show progress
-MEMORY - show stats
-HELP - help needed`,
+Do not explain. Just write the word.`,
       },
       {
         role: 'user',
@@ -512,22 +515,24 @@ HELP - help needed`,
       },
     ], {
       temperature: 0.1,
-      max_tokens: 5,
-      timeout: 15 * 1000, // 15 seconds for intent classification
+      max_tokens: 10,
+      timeout: 15 * 1000,
     });
 
     const intent = response.trim().toUpperCase();
-    console.log(`🧠 Intent: "${intent}"`);
+    console.log(`🧠 Intent raw response: "${response}"`);
+    console.log(`🧠 Intent parsed: "${intent}"`);
     
     // Extract first valid intent if wrapped in text
     if (intent.includes('PLAN')) return 'PLAN';
-    if (intent.includes('RUN_ALL')) return 'RUN_ALL';
+    if (intent.includes('RUN_ALL') || intent.includes('RUN ALL')) return 'RUN_ALL';
     if (intent.includes('EXECUTE_N')) return 'EXECUTE_N';
     if (intent.includes('EXECUTE_ONE')) return 'EXECUTE_ONE';
     if (intent.includes('STATUS')) return 'STATUS';
     if (intent.includes('MEMORY')) return 'MEMORY';
     if (intent.includes('HELP')) return 'HELP';
     
+    console.log(`⚠️ Unknown intent: "${intent}"`);
     return null;
   } catch (error) {
     console.error('❌ Intent classification error:', error.message);
@@ -740,8 +745,7 @@ async function startBot() {
     await bot.telegram.setWebhook(webhookUrl);
     console.log('✅ Webhook registered with Telegram');
     
-    // Start health server for webhook
-    const express = require('express');
+    // Start HTTP server for webhook
     const app = express();
     app.use(express.json());
     
