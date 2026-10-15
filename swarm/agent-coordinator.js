@@ -542,134 +542,128 @@ bot.on('text', async (ctx) => {
   try {
     const message = ctx.message.text.trim();
     
-    // Ignore commands (they'll be handled by bot.command)
-    if (message.startsWith('/')) {
-      return;
-    }
+    if (message.startsWith('/')) return;
     
     console.log(`\n💬 User: "${message}"`);
-    console.log(`🧠 Classifying intent...`);
     
-    // Classify intent using LLM
-    const intent = await classifyUserIntent(message);
+    // Build context for the agent
+    const stats = memory.getStats();
+    const queueInfo = taskQueue.length > 0 
+      ? `Task queue: ${taskQueue.length} tasks pending. Next task: "${taskQueue[0]?.substring(0, 100)}"` 
+      : 'Task queue is empty.';
+    const completedInfo = `Completed tasks this session: ${taskLog.length}`;
     
-    if (!intent) {
-      ctx.reply(`I didn't understand. Try:\n"make a plan"\n"run 5 tasks"\n"what's the status"\n"show stats"`);
-      return;
+    // Let the LLM respond conversationally AND decide what to do
+    const agentResponse = await llmProvider.callLLM([
+      {
+        role: 'system',
+        content: `You are an autonomous AI development agent building the Proximity Social App (React Native + TypeScript).
+
+CURRENT STATE:
+- ${queueInfo}
+- ${completedInfo}
+- Memory: ${stats.tasksCompleted} tasks completed total, ${stats.tasksFailed} failed
+
+YOU CAN:
+1. Chat naturally with the user
+2. Trigger actions by including these EXACT tags in your response:
+   [ACTION:PLAN] - create a new development plan
+   [ACTION:RUN:N] - run N tasks (replace N with number, e.g. [ACTION:RUN:5])
+   [ACTION:RUN_ALL] - run all tasks
+   [ACTION:STATUS] - show status
+
+RULES:
+- Always respond conversationally first, then add the action tag if needed
+- Be helpful, friendly and proactive
+- If user asks you to do something, DO it (include the action tag)
+- Keep responses concise
+- Report what you're doing`,
+      },
+      {
+        role: 'user',
+        content: message,
+      },
+    ], {
+      temperature: 0.7,
+      max_tokens: 300,
+    });
+
+    // Extract action tag if present
+    const actionMatch = agentResponse.match(/\[ACTION:([\w:]+)\]/);
+    
+    // Send the conversational response (without the action tag)
+    const cleanResponse = agentResponse.replace(/\[ACTION:[\w:]+\]/g, '').trim();
+    if (cleanResponse) {
+      await ctx.reply(cleanResponse);
     }
-    
-    // === EXECUTE INTENT ===
-    
-    if (intent === 'PLAN') {
-      ctx.reply('📋 Creating plan...');
-      try {
-        const tasks = await createExecutionPlan();
-        if (tasks.length === 0) {
-          ctx.reply('❌ Failed to create plan');
+
+    // Execute the action
+    if (actionMatch) {
+      const action = actionMatch[1];
+      console.log(`🎯 Action: ${action}`);
+
+      if (action === 'PLAN') {
+        await ctx.reply('📋 Creating development plan...');
+        try {
+          const tasks = await createExecutionPlan();
+          taskQueue = tasks;
+          await ctx.reply(`✅ Created ${tasks.length} tasks! Say "run 5 tasks" to start.`);
+        } catch (error) {
+          await ctx.reply(`❌ Error creating plan: ${error.message}`);
+        }
+      }
+
+      else if (action === 'RUN_ALL') {
+        if (taskQueue.length === 0) {
+          await ctx.reply('❌ No tasks queued. Say "make a plan" first.');
           return;
         }
-        taskQueue = tasks;
-        ctx.reply(`✅ Created ${tasks.length} tasks!\n\nNow you can say "run all" or "do 5 tasks"`);
-      } catch (error) {
-        ctx.reply(`❌ Error: ${error.message}`);
+        await autoExecuteAll(ctx);
       }
-    }
-    
-    else if (intent === 'RUN_ALL') {
-      if (taskQueue.length === 0) {
-        ctx.reply('❌ No tasks. Say "make a plan" first.');
-        return;
-      }
-      await autoExecuteAll(ctx);
-    }
-    
-    else if (intent.startsWith('EXECUTE_N:')) {
-      const count = parseInt(intent.split(':')[1]);
-      
-      if (taskQueue.length === 0) {
-        ctx.reply('❌ No tasks queued.');
-        return;
-      }
-      
-      const toRun = Math.min(count, taskQueue.length);
-      let completed = 0;
-      
-      ctx.reply(`🚀 Running ${toRun} task(s)...`);
-      
-      for (let i = 0; i < toRun; i++) {
-        const task = taskQueue.shift();
-        try {
-          const result = await executeTask(task);
-          if (result) {
-            const validation = await validateTaskCompletion(task, result);
-            const approved = validation && validation.toUpperCase().includes('DECISION: YES');
-            if (approved) {
-              completed++;
-              memory.recordTaskCompletion(task, true, result, llmProvider.getCurrentProvider().name, 0);
+
+      else if (action.startsWith('RUN:')) {
+        const count = parseInt(action.split(':')[1]) || 1;
+        if (taskQueue.length === 0) {
+          await ctx.reply('❌ No tasks queued. Say "make a plan" first.');
+          return;
+        }
+        const toRun = Math.min(count, taskQueue.length);
+        await ctx.reply(`🚀 Running ${toRun} task(s)...`);
+        let completed = 0;
+        for (let i = 0; i < toRun; i++) {
+          const task = taskQueue.shift();
+          try {
+            await ctx.reply(`⚙️ Task ${i+1}/${toRun}: ${task.substring(0, 80)}...`);
+            const result = await executeTask(task);
+            if (result) {
+              const validation = await validateTaskCompletion(task, result);
+              const approved = validation && validation.toUpperCase().includes('DECISION: YES');
+              if (approved) {
+                completed++;
+                taskLog.push({ task, result });
+                memory.recordTaskCompletion(task, true, result, llmProvider.getCurrentProvider().name, 0);
+                await ctx.reply(`✅ Task ${i+1} done!`);
+              } else {
+                taskQueue.unshift(`[REVISION] ${task}`);
+                await ctx.reply(`⚠️ Task ${i+1} needs revision.`);
+              }
             }
-          }
-        } catch (error) {
-          console.error(`Task error:`, error.message);
-        }
-      }
-      
-      ctx.reply(`✅ ${completed}/${toRun} completed!\n⏳ ${taskQueue.length} tasks remaining.`);
-    }
-    
-    else if (intent === 'EXECUTE_ONE') {
-      if (taskQueue.length === 0) {
-        ctx.reply('❌ No tasks remaining.');
-        return;
-      }
-      
-      const task = taskQueue.shift();
-      ctx.reply(`💻 Running task...`);
-      
-      try {
-        const result = await executeTask(task);
-        if (result) {
-          const msgs = result.match(/[\s\S]{1,4000}/g) || [result];
-          for (const msg of msgs) {
-            ctx.reply(msg).catch(() => {});
-          }
-          
-          const validation = await validateTaskCompletion(task, result);
-          const approved = validation && validation.toUpperCase().includes('DECISION: YES');
-          
-          if (!approved) {
-            taskQueue.unshift(`[REVISION] ${task}`);
-            ctx.reply('⚠️ Needs revision.');
-          } else {
-            ctx.reply(`✅ Done! ${taskQueue.length} remaining.`);
+          } catch (error) {
+            await ctx.reply(`❌ Task ${i+1} failed: ${error.message}`);
           }
         }
-      } catch (error) {
-        ctx.reply(`❌ Error: ${error.message}`);
+        await ctx.reply(`\n📊 Done! ${completed}/${toRun} succeeded.\n⏳ ${taskQueue.length} tasks remaining.`);
+      }
+
+      else if (action === 'STATUS') {
+        const total = taskQueue.length + taskLog.length;
+        await ctx.reply(`📊 Status\n✅ Done: ${taskLog.length}\n⏳ Remaining: ${taskQueue.length}\n📈 Total: ${total}\n💡 Success rate: ${stats.successRate?.current?.toFixed(1) || 'N/A'}%`);
       }
     }
-    
-    else if (intent === 'STATUS') {
-      const total = taskQueue.length + taskLog.length;
-      const completed = taskLog.length;
-      ctx.reply(`📊 Progress\n✅ Done: ${completed}\n⏳ Remaining: ${taskQueue.length}\n📈 Total: ${total}`);
-    }
-    
-    else if (intent === 'MEMORY') {
-      const stats = memory.getStats();
-      ctx.reply(`📚 Stats\n✅ Completed: ${stats.tasksCompleted}\n❌ Failed: ${stats.tasksFailed}\n📈 Success: ${stats.successRate?.current?.toFixed(1) || 'N/A'}%`);
-    }
-    
-    else if (intent === 'HELP') {
-      ctx.reply(`🤖 I can:\n\n"make a plan" → Generate tasks\n"run all" → Execute all\n"do 5 tasks" → Run specific count\n"what's done" → Show progress\n"show stats" → Display results\n\nJust talk naturally!`);
-    }
-    
-    else {
-      ctx.reply(`I'm not sure. Try:\n"make a plan"\n"run all tasks"\n"what's the status"`);
-    }
-    
+
   } catch (error) {
     console.error('❌ Error processing message:', error);
-    ctx.reply(`Error: ${error.message}`).catch(() => {});
+    ctx.reply(`Sorry, I hit an error: ${error.message}`).catch(() => {});
   }
 });
 
