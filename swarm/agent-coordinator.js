@@ -202,7 +202,7 @@ START WITH "File:" and show COMPLETE working code.`,
           const dir = path.dirname(fullPath);
           fs.mkdirSync(dir, { recursive: true });
           fs.writeFileSync(fullPath, code, 'utf-8');
-          savedFiles.push(fullPath);
+          savedFiles.push({ fullPath, filePath });
           console.log(`✅ Saved: ${fullPath}`);
         } catch (writeError) {
           // Fallback: save to local swarm/output directory
@@ -210,12 +210,28 @@ START WITH "File:" and show COMPLETE working code.`,
           try {
             fs.mkdirSync(path.dirname(fallbackPath), { recursive: true });
             fs.writeFileSync(fallbackPath, code, 'utf-8');
-            savedFiles.push(fallbackPath);
+            savedFiles.push({ fullPath: fallbackPath, filePath });
             console.log(`✅ Saved (fallback): ${fallbackPath}`);
           } catch (e) {
             console.error(`❌ Could not save ${filePath}: ${writeError.message}`);
           }
         }
+      }
+    }
+
+    // === AUTO-COMMIT TO GITHUB ===
+    if (savedFiles.length > 0) {
+      const appPath = process.env.PROJECT_PATH || '/opt/render/project/proximity-app';
+      try {
+        const { execSync } = await import('child_process');
+        execSync(`cd "${appPath}" && git config user.email "agent@proximity.app" && git config user.name "AI Agent"`, { stdio: 'pipe' });
+        execSync(`cd "${appPath}" && git add -A`, { stdio: 'pipe' });
+        const commitMsg = `AI: ${taskDescription.substring(0, 60)}`;
+        execSync(`cd "${appPath}" && git commit -m "${commitMsg}"`, { stdio: 'pipe' });
+        execSync(`cd "${appPath}" && git push origin main`, { stdio: 'pipe' });
+        console.log(`✅ Committed and pushed ${savedFiles.length} file(s) to GitHub`);
+      } catch (gitError) {
+        console.log(`⚠️ Git commit failed: ${gitError.message}`);
       }
     }
 
