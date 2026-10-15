@@ -100,7 +100,7 @@ class MultiLLMProvider {
     let lastError = null;
     let attempts = 0;
     const maxAttempts = this.providers.length;
-    const timeout = options.timeout || 5 * 60 * 1000; // 5 minutes default
+    const timeout = options.timeout || 30 * 1000; // 30 seconds default (cloud-friendly)
 
     while (attempts < maxAttempts) {
       const provider = this.getCurrentProvider();
@@ -109,16 +109,25 @@ class MultiLLMProvider {
       try {
         console.log(`📞 Calling ${provider.name}... (timeout: ${timeout / 1000}s)`);
 
+        // Wrap with timeout promise
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`Request timeout after ${timeout / 1000}s`)), timeout)
+        );
+
+        let callPromise;
         let response;
 
         if (provider.type === 'groq') {
-          response = await provider.client.chat.completions.create({
+          callPromise = provider.client.chat.completions.create({
             model: options.model || 'openai/gpt-oss-20b',
             messages: messages,
             temperature: options.temperature || 0.7,
             max_tokens: options.max_tokens || 3000,
           });
-          return response.choices[0]?.message?.content || '';
+          response = await Promise.race([callPromise, timeoutPromise]);
+          const content = response.choices[0]?.message?.content || '';
+          console.log(`✅ ${provider.name} succeeded`);
+          return content;
         } else if (provider.type === 'gemini') {
           const model = provider.client.getGenerativeModel({
             model: options.model || 'gemini-1.5-flash',
@@ -133,24 +142,29 @@ class MultiLLMProvider {
 
           const userMessage =
             userMessages[userMessages.length - 1]?.content || 'Process the request';
-          const result = await chat.sendMessage(userMessage);
-          return result.response.text();
+          callPromise = chat.sendMessage(userMessage);
+          const result = await Promise.race([callPromise, timeoutPromise]);
+          const content = result.response.text();
+          console.log(`✅ ${provider.name} succeeded`);
+          return content;
         } else if (provider.type === 'openai') {
-          response = await provider.client.chat.completions.create({
+          callPromise = provider.client.chat.completions.create({
             model: options.model || 'gpt-4o-mini',
             messages: messages,
             temperature: options.temperature || 0.7,
             max_tokens: options.max_tokens || 3000,
           });
-          return response.choices[0]?.message?.content || '';
+          response = await Promise.race([callPromise, timeoutPromise]);
+          const content = response.choices[0]?.message?.content || '';
+          console.log(`✅ ${provider.name} succeeded`);
+          return content;
         }
       } catch (error) {
         lastError = error;
         console.error(`❌ ${provider.name} failed:`);
         console.error(`   Message: ${error.message}`);
-        console.error(`   Full error: ${JSON.stringify(error, null, 2)}`);
         if (error.stack) {
-          console.error(`   Stack: ${error.stack.split('\n')[0]}`);
+          console.error(`   Stack trace: ${error.stack.substring(0, 200)}`);
         }
 
         if (
@@ -160,7 +174,6 @@ class MultiLLMProvider {
         ) {
           console.log(`⚠️ Rate limit hit. Rotating to next provider...`);
           
-          // Send Telegram notification
           if (this.notifyCallback) {
             this.notifyCallback(`⚠️ RATE LIMIT: ${provider.name} exhausted\n\n🔄 Rotating to next provider...`);
           }
@@ -175,7 +188,7 @@ class MultiLLMProvider {
           
           this.rotateProvider();
         } else {
-          console.log(`Error occurred. Trying next provider...`);
+          console.log(`⚠️ Error occurred. Trying next provider...`);
           this.rotateProvider();
         }
       }

@@ -513,6 +513,7 @@ HELP - help needed`,
     ], {
       temperature: 0.1,
       max_tokens: 5,
+      timeout: 15 * 1000, // 15 seconds for intent classification
     });
 
     const intent = response.trim().toUpperCase();
@@ -529,7 +530,7 @@ HELP - help needed`,
     
     return null;
   } catch (error) {
-    console.error('Intent classification error:', error.message);
+    console.error('❌ Intent classification error:', error.message);
     return null;
   }
 }
