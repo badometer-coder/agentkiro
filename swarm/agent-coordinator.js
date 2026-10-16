@@ -394,6 +394,14 @@ async function readProjectFiles(appPath, taskDescription = '') {
   }
 
   let context = '';
+
+  // Show the actual file structure first so agent uses correct paths
+  try {
+    const { execSync: exec } = await import('child_process');
+    const tree = exec(`find "${appPath}/src" -name "*.ts" -o -name "*.tsx" 2>/dev/null | sed 's|${appPath}/||' | sort`, { encoding: 'utf-8', stdio: 'pipe' });
+    context += `\n=== PROJECT FILE STRUCTURE (use EXACT paths) ===\n${tree}`;
+  } catch { /* skip */ }
+
   for (const relPath of filesToRead) {
     const fullPath = path.join(appPath, relPath);
     try {
