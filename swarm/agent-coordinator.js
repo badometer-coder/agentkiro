@@ -375,21 +375,22 @@ async function readProjectFiles(appPath, taskDescription = '') {
   let filesToRead = [];
 
   // Pick only relevant files based on task keywords
-  if (task.includes('login') || task.includes('auth') || task.includes('password') || task.includes('username')) {
-    filesToRead = ['src/screens/auth/LoginScreen.tsx', 'src/constants/theme.ts'];
+  if (task.includes('login') || task.includes('auth') || task.includes('password') || task.includes('username') || task.includes('sign')) {
+    filesToRead = ['src/screens/auth/LoginScreen.tsx', 'src/hooks/auth/useAuth.ts', 'src/constants/theme.ts'];
   } else if (task.includes('profile') || task.includes('setup')) {
     filesToRead = ['src/screens/auth/ProfileSetupScreen.tsx', 'src/constants/theme.ts'];
   } else if (task.includes('chat') || task.includes('message')) {
     filesToRead = ['src/screens/main/ChatThreadScreen.tsx', 'src/constants/theme.ts'];
   } else if (task.includes('theme') || task.includes('context') || task.includes('dark') || task.includes('light')) {
-    filesToRead = ['src/constants/theme.ts', 'App.tsx'];
+    filesToRead = ['src/constants/theme.ts', 'App.tsx', 'src/screens/main/HomeScreen.tsx'];
+  } else if (task.includes('home') || task.includes('signout') || task.includes('sign out') || task.includes('logout')) {
+    filesToRead = ['src/screens/main/HomeScreen.tsx', 'src/hooks/auth/useAuth.ts', 'src/constants/theme.ts'];
   } else if (task.includes('proximity') || task.includes('feed') || task.includes('nearby')) {
     filesToRead = ['src/screens/main/ProximityFeedScreen.tsx', 'src/constants/theme.ts'];
   } else if (task.includes('app.tsx') || task.includes('navigation')) {
-    filesToRead = ['App.tsx'];
+    filesToRead = ['App.tsx', 'src/constants/theme.ts'];
   } else {
-    // Default: just theme + the most relevant screen
-    filesToRead = ['src/constants/theme.ts', 'src/screens/main/ProximityFeedScreen.tsx'];
+    filesToRead = ['src/constants/theme.ts', 'src/screens/main/HomeScreen.tsx'];
   }
 
   let context = '';
