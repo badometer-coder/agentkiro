@@ -128,9 +128,9 @@ class MultiLLMProvider {
         } else if (provider.type === 'gemini') {
           try {
             const model = provider.client.getGenerativeModel({
-              model: 'gemini-1.5-flash',
+              model: 'gemini-2.5-flash',
               generationConfig: {
-                maxOutputTokens: options.max_tokens || 8192,
+                maxOutputTokens: options.max_tokens || 16384,
                 temperature: options.temperature || 0.3,
               },
             });
