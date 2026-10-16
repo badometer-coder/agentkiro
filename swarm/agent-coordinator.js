@@ -479,7 +479,7 @@ OUTPUT: Modified file(s) only. Start each with "File: <path>" then the complete 
       result = await Promise.race([
         llmProvider.callLLM(messages, {
           temperature: 0.3,
-          max_tokens: 800,  // Groq free tier limit is 1000 OTPM
+          max_tokens: 1500,  // Increased — CI fix tasks need multiple complete files
           timeout: 6 * 60 * 1000,
         }),
         new Promise((_, reject) =>
@@ -1304,8 +1304,8 @@ startBot();
 const seenCIErrors = new Set();
 
 setCIErrorCallback(async (errorMessage) => {
-  // Deduplicate — same error URL should only fire once
-  const errorKey = errorMessage.substring(0, 100);
+  // Deduplicate — same CI run should only fire once (use run URL as key)
+  const errorKey = errorMessage.match(/runs\/(\d+)/)?.[1] || errorMessage.substring(0, 100);
   if (seenCIErrors.has(errorKey)) {
     console.log(`🔇 Duplicate CI error ignored: ${errorKey}`);
     return;
