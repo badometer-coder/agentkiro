@@ -416,6 +416,12 @@ async function readProjectFiles(appPath, taskDescription = '') {
     context += `\n\n=== package.json (ONLY use packages listed here) ===\n${pkg}`;
   } catch { /* skip */ }
 
+  // Always include App.tsx — critical for navigation tasks
+  try {
+    const appTsx = fs.readFileSync(path.join(appPath, 'App.tsx'), 'utf-8');
+    context += `\n\n=== CURRENT FILE: App.tsx (ROOT - read carefully before modifying) ===\n${appTsx}`;
+  } catch { /* skip */ }
+
   return context;
 }
 
