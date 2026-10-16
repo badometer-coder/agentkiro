@@ -167,6 +167,8 @@ const PROTECTED_FILES = [
   'app.json',
   'package.json',
   'tsconfig.json',
+  'index.ts',          // src/types/index.ts
+  'index.ts',          // src/lib/utils/index.ts
 ];
 
 // After saving a file, validate it wasn't completely rewritten with wrong content
@@ -1301,6 +1303,8 @@ startBot();
 
 // CI error notification — notifies via Telegram but does NOT auto-fix (prevents loops)
 // Track seen CI errors to prevent duplicate processing
+let ciFixAttempts = 0;
+const MAX_CI_FIX_ATTEMPTS = 3;
 const seenCIErrors = new Set();
 
 setCIErrorCallback(async (errorMessage) => {
@@ -1314,7 +1318,20 @@ setCIErrorCallback(async (errorMessage) => {
   // Clear after 30 min to allow re-triggering on new failures
   setTimeout(() => seenCIErrors.delete(errorKey), 30 * 60 * 1000);
 
-  console.log(`🚨 CI Error: ${errorMessage}`);
+  // Stop if too many consecutive fix attempts — prevent infinite loops
+  ciFixAttempts++;
+  if (ciFixAttempts > MAX_CI_FIX_ATTEMPTS) {
+    console.log(`🛑 CI auto-fix stopped after ${MAX_CI_FIX_ATTEMPTS} attempts. Manual intervention needed.`);
+    if (telegramBotContext) {
+      await telegramBotContext.telegram.sendMessage(
+        telegramBotContext.chat.id,
+        `🛑 CI auto-fix gave up after ${MAX_CI_FIX_ATTEMPTS} attempts. Too many errors — please review manually.\n\nLast errors:\n${errorMessage.substring(0, 400)}`
+      ).catch(() => {});
+    }
+    return;
+  }
+
+  console.log(`🚨 CI Error (attempt ${ciFixAttempts}/${MAX_CI_FIX_ATTEMPTS}): ${errorMessage}`);
 
   // Notify via Telegram
   if (telegramBotContext) {
@@ -1367,9 +1384,10 @@ ${errorLines}`;
     try {
       const result = await executeTask(fixTask, telegramBotContext);
       if (result && telegramBotContext) {
+        ciFixAttempts = 0; // Reset on successful fix
         await telegramBotContext.telegram.sendMessage(
           telegramBotContext.chat.id,
-          `✅ CI auto-fix applied. Waiting for next CI run to confirm.`
+          `✅ CI auto-fix applied (attempt ${ciFixAttempts}). Waiting for next CI run to confirm.`
         ).catch(() => {});
       }
     } catch (err) {
