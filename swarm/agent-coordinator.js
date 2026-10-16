@@ -1332,7 +1332,19 @@ setCIErrorCallback(async (errorMessage) => {
     .join('\n');
 
   if (errorLines.length > 0) {
-    const fixTask = `Fix the following TypeScript errors in the proximity app so the CI build passes. Do NOT change any logic or features — only fix the type errors:\n\n${errorLines}`;
+    const fixTask = `Fix the following TypeScript errors in the proximity app so the CI build passes. Do NOT change any logic or features — only fix the type errors.
+
+REAL HOOK APIs (use EXACTLY these — do not invent properties):
+- useCurrentLocation() returns: { location: GPSCoordinates|null, isLoading: boolean, error: string|null, permissionStatus: string, requestPermission: () => Promise<boolean> }
+- useNearbyPeers(location: GPSCoordinates|null) returns: { peers: FormattedNearbyPeer[], selectedRadius: number, isLoading: boolean, isRefreshing: boolean, error: ApiError|null, lastFetchedAt: string|null, setRadius: (r: number) => void, refresh: () => Promise<void> }
+- useAuth() returns: { user: User|null, session: Session|null, loading: boolean, signIn, signUp, signOut }
+- EmptyState props: { icon: any, title: string, description: string, actionLabel?: string, onAction?: () => void }
+- NearbyPeerCard props: { peer: FormattedNearbyPeer, onPress: () => void }
+- RadiusSlider props: { value: number, onValueChange: (val: number) => void }
+- ProximityHeader props: { lastUpdated: string|null }
+
+ERRORS TO FIX:
+${errorLines}`;
     console.log(`🔧 Auto-queuing CI fix task...`);
     try {
       const result = await executeTask(fixTask, telegramBotContext);
