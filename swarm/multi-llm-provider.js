@@ -34,9 +34,18 @@ class MultiLLMProvider {
       });
     });
 
-    // === GEMINI as fallback (disabled due to API issues) ===
-    // const geminiKeys = this.loadApiKeys('GEMINI_API_KEY');
-    // ... disabled
+    // === GEMINI as fallback ===
+    const geminiKeys = this.loadApiKeys('GEMINI_API_KEY');
+    geminiKeys.forEach((key, idx) => {
+      if (key && !key.includes('paste_your')) {
+        this.providers.push({
+          type: 'gemini',
+          key: key,
+          client: new GoogleGenerativeAI(key),
+          name: `Gemini #${idx + 1}`,
+        });
+      }
+    });
 
     // === OpenAI as fallback ===
     const openaiKeys = this.loadApiKeys('OPENAI_API_KEY');
@@ -118,24 +127,26 @@ class MultiLLMProvider {
           }
         } else if (provider.type === 'gemini') {
           try {
-            const model = provider.client.getGenerativeModel({
+            const systemPrompt = messages[0]?.role === 'system' ? messages[0]?.content : '';
+            const userMessages = messages.filter((m) => m.role !== 'system');
+            const userMessage = userMessages[userMessages.length - 1]?.content || 'Process the request';
+
+            // Gemini requires systemInstruction as { parts: [{ text }] }, NOT a plain string
+            const modelConfig = {
               model: 'gemini-2.5-flash',
               generationConfig: {
                 maxOutputTokens: options.max_tokens || 16384,
                 temperature: options.temperature || 0.3,
               },
-            });
+            };
+            if (systemPrompt) {
+              modelConfig.systemInstruction = {
+                parts: [{ text: systemPrompt }],
+              };
+            }
 
-            const systemPrompt = messages[0]?.role === 'system' ? messages[0]?.content : '';
-            const userMessages = messages.filter((m) => m.role !== 'system');
-
-            const chat = model.startChat({
-              systemInstruction: systemPrompt || undefined,
-            });
-
-            const userMessage =
-              userMessages[userMessages.length - 1]?.content || 'Process the request';
-            const result = await chat.sendMessage(userMessage);
+            const model = provider.client.getGenerativeModel(modelConfig);
+            const result = await model.generateContent(userMessage);
             const content = result.response.text();
             console.log(`✅ ${provider.name} succeeded`);
             return content;
