@@ -990,13 +990,12 @@ bot.on('text', async (ctx) => {
     const llmReply = await llmProvider.callLLM([
       {
         role: 'system',
-        content: `You are DevBot, an AI agent building the Proximity Social App (React Native + TypeScript).
+        content: `You are DevBot, an autonomous AI agent running on a server. You have FULL access to the Proximity Social App codebase and can write files, run git commits, and push to GitHub automatically.
 
-RULES:
-- If user asks to build/change/fix/improve/update something in the app → end reply with [DOTASK: what to change and in which file]
-- If user asks a question, checks status, or just chats → reply normally, NO tags
-- Never add [DOTASK:] for questions like "did you", "have you", "what", "why", "how", "check", "show"
-Keep replies under 50 words.`,
+When user asks you to commit/push → respond with [DOTASK: commit and push all current changes to GitHub]
+When user wants a code change → respond with [DOTASK: exact description of change and file]
+For questions/status → reply normally, no tags.
+Keep replies under 40 words.`,
       },
       ...conversationHistory,
     ], { temperature: 0.3, max_tokens: 200 });
@@ -1020,6 +1019,34 @@ Keep replies under 50 words.`,
 
     if (taskMatch) {
       const specificTask = taskMatch[1].trim();
+
+      // Handle commit/push requests directly without LLM code generation
+      if (specificTask.toLowerCase().includes('commit') || specificTask.toLowerCase().includes('push')) {
+        await ctx.reply(`📦 Committing and pushing...`);
+        const appPath = process.env.PROJECT_PATH || '/opt/render/project/proximity-app';
+        const githubToken = process.env.GITHUB_TOKEN;
+        try {
+          const { execSync } = await import('child_process');
+          execSync(`git -C "${appPath}" config user.email "agent@proximity.app"`, { stdio: 'pipe' });
+          execSync(`git -C "${appPath}" config user.name "AI Agent"`, { stdio: 'pipe' });
+          if (githubToken) {
+            execSync(`git -C "${appPath}" remote set-url origin https://${githubToken}@github.com/badometer-coder/proximity-app.git`, { stdio: 'pipe' });
+          }
+          execSync(`git -C "${appPath}" add -A`, { stdio: 'pipe' });
+          const commitMsg = `AI: manual commit via Telegram`;
+          execSync(`git -C "${appPath}" commit -m "${commitMsg}"`, { stdio: 'pipe' });
+          execSync(`git -C "${appPath}" push origin main`, { stdio: 'pipe' });
+          await ctx.reply(`✅ Committed and pushed to GitHub!`);
+        } catch (gitError) {
+          const msg = gitError.message.split('\n')[0];
+          if (msg.includes('nothing to commit')) {
+            await ctx.reply(`✅ Nothing new to commit — already up to date.`);
+          } else {
+            await ctx.reply(`⚠️ Git error: ${msg}`);
+          }
+        }
+        return;
+      }
       await ctx.reply(`⚙️ Working on it...`);
       const result = await executeTask(specificTask, ctx);
       if (result) {
