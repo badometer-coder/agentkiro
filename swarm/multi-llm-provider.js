@@ -20,7 +20,20 @@ class MultiLLMProvider {
   }
 
   initializeProviders() {
-    // === GROQ PRIMARY (stable, working) ===
+    // === GEMINI PRIMARY (better quality, 16k output, no truncation) ===
+    const geminiKeys = this.loadApiKeys('GEMINI_API_KEY');
+    geminiKeys.forEach((key, idx) => {
+      if (key && !key.includes('paste_your')) {
+        this.providers.push({
+          type: 'gemini',
+          key: key,
+          client: new GoogleGenerativeAI(key),
+          name: `Gemini #${idx + 1}`,
+        });
+      }
+    });
+
+    // === GROQ as fallback ===
     const groqKeys = this.loadApiKeys('GROQ_API_KEY');
     groqKeys.forEach((key, idx) => {
       this.providers.push({
@@ -32,19 +45,6 @@ class MultiLLMProvider {
         }),
         name: `Groq #${idx + 1}`,
       });
-    });
-
-    // === GEMINI as fallback ===
-    const geminiKeys = this.loadApiKeys('GEMINI_API_KEY');
-    geminiKeys.forEach((key, idx) => {
-      if (key && !key.includes('paste_your')) {
-        this.providers.push({
-          type: 'gemini',
-          key: key,
-          client: new GoogleGenerativeAI(key),
-          name: `Gemini #${idx + 1}`,
-        });
-      }
     });
 
     // === OpenAI as fallback ===
