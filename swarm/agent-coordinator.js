@@ -956,7 +956,11 @@ bot.on('text', async (ctx) => {
     const llmReply = await llmProvider.callLLM([
       {
         role: 'system',
-        content: `You are DevBot, an AI building Proximity Social App (React Native + TypeScript). Reply naturally and helpfully.`,
+        content: `You are DevBot, an AI agent building the Proximity Social App (React Native + TypeScript).
+
+When the user wants to build, change, fix, or improve something, end your reply with: [DOTASK: specific description of what to change and which file]
+For pure chat/questions, just reply normally with no tags.
+Keep replies under 50 words.`,
       },
       ...conversationHistory,
     ], { temperature: 0.3, max_tokens: 200 });
