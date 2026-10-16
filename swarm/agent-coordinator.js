@@ -157,23 +157,29 @@ function isEnvironmentError(error) {
   return ENVIRONMENT_ERRORS.some(e => error.includes(e));
 }
 
+// Track if npm install has already run this session
+let npmInstallDone = false;
+
 async function runTests(appPath) {
   try {
     console.log(`🧪 Testing code...`);
     const { execSync } = await import('child_process');
 
-    // First: ensure dependencies are installed on Render
-    try {
-      const nmExists = fs.existsSync(`${appPath}/node_modules/react`);
-      if (!nmExists) {
-        console.log(`📦 node_modules missing — running npm install...`);
-        execSync(`cd "${appPath}" && npm install --legacy-peer-deps 2>&1`, {
-          encoding: 'utf-8', stdio: 'pipe', timeout: 120000,
-        });
-        console.log(`✅ npm install done`);
+    // Install dependencies once per session if missing
+    if (!npmInstallDone) {
+      try {
+        const nmExists = fs.existsSync(`${appPath}/node_modules/react`);
+        if (!nmExists) {
+          console.log(`📦 node_modules missing — running npm install...`);
+          execSync(`cd "${appPath}" && npm install --legacy-peer-deps 2>&1`, {
+            encoding: 'utf-8', stdio: 'pipe', timeout: 120000,
+          });
+          console.log(`✅ npm install done`);
+        }
+        npmInstallDone = true;
+      } catch (installErr) {
+        console.log(`⚠️ npm install failed: ${installErr.message.split('\n')[0]}`);
       }
-    } catch (installErr) {
-      console.log(`⚠️ npm install failed: ${installErr.message.split('\n')[0]}`);
     }
 
     let testOutput = '';
@@ -958,8 +964,10 @@ bot.on('text', async (ctx) => {
         role: 'system',
         content: `You are DevBot, an AI agent building the Proximity Social App (React Native + TypeScript).
 
-When the user wants to build, change, fix, or improve something, end your reply with: [DOTASK: specific description of what to change and which file]
-For pure chat/questions, just reply normally with no tags.
+RULES:
+- If user asks to build/change/fix/improve/update something in the app → end reply with [DOTASK: what to change and in which file]
+- If user asks a question, checks status, or just chats → reply normally, NO tags
+- Never add [DOTASK:] for questions like "did you", "have you", "what", "why", "how", "check", "show"
 Keep replies under 50 words.`,
       },
       ...conversationHistory,
