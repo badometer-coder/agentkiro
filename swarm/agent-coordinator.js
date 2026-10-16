@@ -446,6 +446,15 @@ STRICT RULES - READ CAREFULLY:
 10. CRITICAL: Before outputting code, verify the requested feature IS actually present in your output. If the task says "add a sign out button", the output MUST contain a sign out button. If the task says "add dark mode", the output MUST contain dark mode logic. NEVER regenerate the existing file unchanged — that is a failure.
 11. If the task references a hook or function (e.g. useAuth, signOut), check the CURRENT PROJECT FILES section to confirm it exists before using it.
 
+ADDITIONAL PACKAGES AVAILABLE (these come with Expo even if not in package.json):
+- @expo/vector-icons (Ionicons, MaterialIcons, FontAwesome, etc.) — ALWAYS available in Expo projects
+- expo-constants, expo-device, expo-status-bar — always available
+
+ARCHITECTURE RULES:
+- Bottom navigation / tab bars belong in App.tsx, NOT in individual screens
+- Individual screens should NOT contain navigation chrome — only their own content
+- If asked to add bottom navigation, modify App.tsx using @react-navigation/bottom-tabs
+
 IF YOU CANNOT DO THE TASK: respond "INCOMPLETE: <reason>"`,
       },
       {
