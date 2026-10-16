@@ -20,20 +20,7 @@ class MultiLLMProvider {
   }
 
   initializeProviders() {
-    // === GEMINI FIRST — better code quality, larger output, 1M context ===
-    const geminiKeys = this.loadApiKeys('GEMINI_API_KEY');
-    geminiKeys.forEach((key, idx) => {
-      if (key && !key.includes('paste_your')) {
-        this.providers.push({
-          type: 'gemini',
-          key: key,
-          client: new GoogleGenerativeAI(key),
-          name: `Gemini #${idx + 1}`,
-        });
-      }
-    });
-
-    // === GROQ as fallback (fast but small output) ===
+    // === GROQ PRIMARY (stable, working) ===
     const groqKeys = this.loadApiKeys('GROQ_API_KEY');
     groqKeys.forEach((key, idx) => {
       this.providers.push({
@@ -47,7 +34,11 @@ class MultiLLMProvider {
       });
     });
 
-    // === OpenAI as last resort ===
+    // === GEMINI as fallback (disabled due to API issues) ===
+    // const geminiKeys = this.loadApiKeys('GEMINI_API_KEY');
+    // ... disabled
+
+    // === OpenAI as fallback ===
     const openaiKeys = this.loadApiKeys('OPENAI_API_KEY');
     openaiKeys.forEach((key, idx) => {
       if (key && !key.includes('paste_your')) {
