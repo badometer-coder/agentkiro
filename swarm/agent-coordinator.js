@@ -336,7 +336,7 @@ async function notifyTaskStatus(ctx, taskName, status, details = '') {
 }
 
 // Read current file contents from the project so the LLM knows the real code
-async function readProjectFiles(appPath) {
+async function readProjectFiles(appPath, taskDescription = '') {
   const { execSync } = await import('child_process');
 
   // Clone the repo on Render if it doesn't exist yet
@@ -353,7 +353,6 @@ async function readProjectFiles(appPath) {
       console.log(`⚠️ Clone failed: ${e.message.split('\n')[0]}`);
     }
   } else {
-    // Pull latest changes
     try {
       execSync(`git -C "${appPath}" pull origin main`, { stdio: 'pipe', timeout: 30000 });
       console.log(`✅ Repo updated`);
@@ -362,7 +361,8 @@ async function readProjectFiles(appPath) {
     }
   }
 
-  const filesToRead = [
+  // Only read files relevant to the task to keep context small
+  const allFiles = [
     'App.tsx',
     'src/constants/theme.ts',
     'src/screens/auth/LoginScreen.tsx',
@@ -371,18 +371,37 @@ async function readProjectFiles(appPath) {
     'src/screens/main/ChatThreadScreen.tsx',
   ];
 
+  const task = taskDescription.toLowerCase();
+  let filesToRead = [];
+
+  // Pick only relevant files based on task keywords
+  if (task.includes('login') || task.includes('auth') || task.includes('password') || task.includes('username')) {
+    filesToRead = ['src/screens/auth/LoginScreen.tsx', 'src/constants/theme.ts'];
+  } else if (task.includes('profile') || task.includes('setup')) {
+    filesToRead = ['src/screens/auth/ProfileSetupScreen.tsx', 'src/constants/theme.ts'];
+  } else if (task.includes('chat') || task.includes('message')) {
+    filesToRead = ['src/screens/main/ChatThreadScreen.tsx', 'src/constants/theme.ts'];
+  } else if (task.includes('theme') || task.includes('context') || task.includes('dark') || task.includes('light')) {
+    filesToRead = ['src/constants/theme.ts', 'App.tsx'];
+  } else if (task.includes('proximity') || task.includes('feed') || task.includes('nearby')) {
+    filesToRead = ['src/screens/main/ProximityFeedScreen.tsx', 'src/constants/theme.ts'];
+  } else if (task.includes('app.tsx') || task.includes('navigation')) {
+    filesToRead = ['App.tsx'];
+  } else {
+    // Default: just theme + the most relevant screen
+    filesToRead = ['src/constants/theme.ts', 'src/screens/main/ProximityFeedScreen.tsx'];
+  }
+
   let context = '';
   for (const relPath of filesToRead) {
     const fullPath = path.join(appPath, relPath);
     try {
       const content = fs.readFileSync(fullPath, 'utf-8');
       context += `\n\n=== CURRENT FILE: ${relPath} ===\n${content}`;
-    } catch {
-      // file doesn't exist, skip
-    }
+    } catch { /* skip */ }
   }
 
-  // Also read package.json so LLM knows what packages are available
+  // Always include package.json (small file, important)
   try {
     const pkg = fs.readFileSync(path.join(appPath, 'package.json'), 'utf-8');
     context += `\n\n=== package.json (ONLY use packages listed here) ===\n${pkg}`;
@@ -397,7 +416,7 @@ async function executeTask(taskDescription, ctx = null) {
     console.log(`💻 Dev Agent: Executing task (Provider: ${stats.currentProvider})...`);
 
     const appPath = process.env.PROJECT_PATH || '/opt/render/project/proximity-app';
-    const currentFiles = await readProjectFiles(appPath);
+    const currentFiles = await readProjectFiles(appPath, taskDescription);
     console.log(`📂 Read existing project files for context`);
     
     const messages = [
@@ -434,7 +453,7 @@ OUTPUT: Modified file(s) only. Start each with "File: <path>" then the complete 
       result = await Promise.race([
         llmProvider.callLLM(messages, {
           temperature: 0.3,
-          max_tokens: 3000,  // Increased — files must not be truncated
+          max_tokens: 800,  // Groq free tier limit is 1000 OTPM
           timeout: 6 * 60 * 1000,
         }),
         new Promise((_, reject) =>
