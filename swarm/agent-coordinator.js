@@ -295,7 +295,32 @@ async function notifyTaskStatus(ctx, taskName, status, details = '') {
 }
 
 // Read current file contents from the project so the LLM knows the real code
-function readProjectFiles(appPath) {
+async function readProjectFiles(appPath) {
+  const { execSync } = await import('child_process');
+
+  // Clone the repo on Render if it doesn't exist yet
+  if (!fs.existsSync(appPath)) {
+    console.log(`📥 Cloning proximity-app repo to ${appPath}...`);
+    try {
+      const token = process.env.GITHUB_TOKEN;
+      const repoUrl = token
+        ? `https://${token}@github.com/badometer-coder/proximity-app.git`
+        : `https://github.com/badometer-coder/proximity-app.git`;
+      execSync(`git clone ${repoUrl} "${appPath}"`, { stdio: 'pipe', timeout: 60000 });
+      console.log(`✅ Repo cloned`);
+    } catch (e) {
+      console.log(`⚠️ Clone failed: ${e.message.split('\n')[0]}`);
+    }
+  } else {
+    // Pull latest changes
+    try {
+      execSync(`git -C "${appPath}" pull origin main`, { stdio: 'pipe', timeout: 30000 });
+      console.log(`✅ Repo updated`);
+    } catch (e) {
+      console.log(`⚠️ Git pull failed: ${e.message.split('\n')[0]}`);
+    }
+  }
+
   const filesToRead = [
     'App.tsx',
     'src/constants/theme.ts',
@@ -331,7 +356,7 @@ async function executeTask(taskDescription, ctx = null) {
     console.log(`💻 Dev Agent: Executing task (Provider: ${stats.currentProvider})...`);
 
     const appPath = process.env.PROJECT_PATH || '/opt/render/project/proximity-app';
-    const currentFiles = readProjectFiles(appPath);
+    const currentFiles = await readProjectFiles(appPath);
     console.log(`📂 Read existing project files for context`);
     
     const messages = [
