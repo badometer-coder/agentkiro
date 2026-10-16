@@ -1341,57 +1341,70 @@ setCIErrorCallback(async (errorMessage) => {
     ).catch(() => {});
   }
 
-  // Auto-fix: extract TS errors and queue a fix task
+  // Auto-fix: group errors by file and fix each file separately
   const errorLines = errorMessage
     .split('\n')
-    .filter(l => l.includes('error TS'))
-    .slice(0, 5)
-    .join('\n');
+    .filter(l => l.includes('error TS'));
 
   if (errorLines.length > 0) {
-    const fixTask = `Fix the following TypeScript errors in the proximity app so the CI build passes. Do NOT change any logic or features — only fix the type errors.
+    // Group errors by file path
+    const errorsByFile = {};
+    for (const line of errorLines) {
+      const fileMatch = line.match(/^([^(]+)\(\d+,\d+\)/);
+      if (fileMatch) {
+        const file = fileMatch[1].trim();
+        if (!errorsByFile[file]) errorsByFile[file] = [];
+        errorsByFile[file].push(line);
+      }
+    }
 
-REAL TYPE DEFINITIONS (use EXACTLY these):
-
-interface NearbyPeer {
-  id: string; username: string; full_name: string; age: number;
-  avatar_url: string | null; is_ble_discoverable: boolean;
-  distance_meters: number; last_active_at: string;
-}
-interface FormattedNearbyPeer extends NearbyPeer {
-  formatted_distance: string; signal_strength: SignalStrength; presence_status: UserPresenceStatus;
-}
+    const contextBlock = `
+REAL TYPE DEFINITIONS (use EXACTLY these — never invent new properties):
+interface NearbyPeer { id: string; username: string; full_name: string; age: number; avatar_url: string|null; is_ble_discoverable: boolean; distance_meters: number; last_active_at: string; }
+interface FormattedNearbyPeer extends NearbyPeer { formatted_distance: string; signal_strength: SignalStrength; presence_status: UserPresenceStatus; }
 interface ApiError { code: string; message: string; details?: Record<string, unknown>; }
+type SignalStrength = 'excellent'|'good'|'fair'|'weak'|'none';
+type UserPresenceStatus = 'online'|'recently'|'offline';
+interface ChatMessage { id: string; sender_id: string; receiver_id: string; message: string; sent_at: string; read: boolean; }
 
 REAL COMPONENT PROPS:
-- Avatar: { uri: string|null, name: string, size?: number } — NOT "url", use "uri"
-- SignalIndicator: check SignalIndicatorProps in the file — NOT "rssi" or "rssi_dbm"
-- NearbyPeerCard: { peer: FormattedNearbyPeer, onPress: () => void } — NO "onWave"
-- EmptyState: { icon: any, title: string, description: string } — NOT "message", use "description"
+- Avatar: { uri: string|null, name: string, size?: number } — use "uri" NOT "url"
+- NearbyPeerCard: { peer: FormattedNearbyPeer, onPress: ()=>void } — NO "onWave"
+- EmptyState: { icon: any, title: string, description: string } — use "description" NOT "message"
+- RadiusSlider: { value: number, onValueChange: (val: number)=>void }
+- ProximityHeader: { lastUpdated: string|null }
 
 REAL HOOK APIs:
-- useNearbyPeers(location: GPSCoordinates|null) returns: { peers: FormattedNearbyPeer[], selectedRadius: number, isLoading: boolean, isRefreshing: boolean, error: ApiError|null, lastFetchedAt: string|null, setRadius: (r: number)=>void, refresh: ()=>Promise<void> }
+- useNearbyPeers(location: GPSCoordinates|null) returns: { peers: FormattedNearbyPeer[], selectedRadius: number, isLoading: boolean, isRefreshing: boolean, error: ApiError|null, lastFetchedAt: string|null, setRadius: (r:number)=>void, refresh: ()=>Promise<void> }
 - useCurrentLocation() returns: { location: GPSCoordinates|null, isLoading: boolean, error: string|null, permissionStatus: string, requestPermission: ()=>Promise<boolean> }
 - useAuth() returns: { user: User|null, session: Session|null, loading: boolean, signIn, signUp, signOut }
+- useChatMessages(peerId, peerName) returns: { messages: ChatMessage[], isLoading: boolean, sendMessage: (text: string)=>Promise<void> }
 
-REAL UTILS (src/lib/utils/index.ts exports): formatDistance, getSignalStrength, getSignalBars, getPresenceStatus, getPresenceColor, formatRelativeTime, getInitials, formatTime — NO "calculateDistanceKm"
+REAL UTILS exports: formatDistance, getSignalStrength, getSignalBars, getPresenceStatus, getPresenceColor, formatRelativeTime, getInitials, formatTime — NO "calculateDistanceKm"`;
 
-ApiError MUST have both "code" AND "message" fields. Never set error to just { message: string }.
+    // Fix each broken file separately
+    for (const [file, errors] of Object.entries(errorsByFile)) {
+      const fileErrors = errors.join('\n');
+      const fixTask = `Fix ONLY the file "${file}" to resolve these TypeScript errors. Do NOT change any other files. Do NOT change logic — only fix type errors.
+${contextBlock}
 
-ERRORS TO FIX:
-${errorLines}`;
-    console.log(`🔧 Auto-queuing CI fix task...`);
-    try {
-      const result = await executeTask(fixTask, telegramBotContext);
-      if (result && telegramBotContext) {
-        ciFixAttempts = 0; // Reset on successful fix
-        await telegramBotContext.telegram.sendMessage(
-          telegramBotContext.chat.id,
-          `✅ CI auto-fix applied (attempt ${ciFixAttempts}). Waiting for next CI run to confirm.`
-        ).catch(() => {});
+ERRORS IN ${file}:
+${fileErrors}`;
+
+      console.log(`🔧 Auto-fixing ${file}...`);
+      try {
+        await executeTask(fixTask, telegramBotContext);
+      } catch (err) {
+        console.error(`❌ CI auto-fix failed for ${file}: ${err.message}`);
       }
-    } catch (err) {
-      console.error(`❌ CI auto-fix failed: ${err.message}`);
+    }
+
+    ciFixAttempts = 0;
+    if (telegramBotContext) {
+      await telegramBotContext.telegram.sendMessage(
+        telegramBotContext.chat.id,
+        `✅ CI auto-fix applied to ${Object.keys(errorsByFile).length} file(s). Waiting for CI to confirm.`
+      ).catch(() => {});
     }
   }
 });
