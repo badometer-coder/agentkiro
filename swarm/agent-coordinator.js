@@ -149,8 +149,9 @@ const ENVIRONMENT_ERRORS = [
   '--jsx is not set',
   'expo/tsconfig.base',
   'File \'expo/',
-  'TS6053',  // File not found (tsconfig base)
-  'TS6046',  // Bad module option
+  'TS6053',
+  'TS6046',
+  'TS7016',   // No declaration file (missing @types) — env issue not code bug
 ];
 
 function isEnvironmentError(error) {
@@ -367,11 +368,12 @@ async function executeTask(taskDescription, ctx = null) {
 STRICT RULES - READ CAREFULLY:
 1. ONLY modify files shown in "CURRENT FILE" sections below. Do NOT invent new imports.
 2. ONLY use packages that exist in package.json. NEVER import a package not listed there.
-3. ALWAYS keep the existing import style and structure of each file.
-4. ALWAYS provide COMPLETE file content — no truncation, no "// rest stays the same".
-5. ALWAYS start each file with: File: <path>
-6. NO markdown fences (no \`\`\`typescript, no \`\`\`). Raw code only.
-7. NO explanations before or after the code.
+3. NEVER import "expo-router" — it is NOT in this project.
+4. ALWAYS keep the existing import style and structure of each file.
+5. ALWAYS provide COMPLETE file content — no truncation, no "// rest stays the same".
+6. ALWAYS start each file with: File: <path>
+7. NO markdown fences (no \`\`\`typescript, no \`\`\`). Raw code only.
+8. NO explanations before or after the code.
 
 IF YOU CANNOT DO THE TASK: respond "INCOMPLETE: <reason>"`,
       },
@@ -571,15 +573,13 @@ OUTPUT: Modified file(s) only. Start each with "File: <path>" then the complete 
       }
     }
 
-    // === AUTO-COMMIT TO GITHUB ===
-    if (savedFiles.length > 0) {
+    // === AUTO-COMMIT TO GITHUB (only if tests passed) ===
+    if (savedFiles.length > 0 && testPassed) {
       const githubToken = process.env.GITHUB_TOKEN;
       try {
         const { execSync } = await import('child_process');
-        // Configure git
         execSync(`git -C "${appPath}" config user.email "agent@proximity.app"`, { stdio: 'pipe' });
         execSync(`git -C "${appPath}" config user.name "AI Agent"`, { stdio: 'pipe' });
-        // Set remote with token if available
         if (githubToken) {
           execSync(`git -C "${appPath}" remote set-url origin https://${githubToken}@github.com/badometer-coder/proximity-app.git`, { stdio: 'pipe' });
         }
@@ -591,6 +591,9 @@ OUTPUT: Modified file(s) only. Start each with "File: <path>" then the complete 
       } catch (gitError) {
         console.log(`⚠️ Git commit failed: ${gitError.message.split('\n')[0]}`);
       }
+    } else if (savedFiles.length > 0 && !testPassed) {
+      console.log(`⚠️ Skipping commit — tests failed`);
+      await notifyTaskStatus(ctx, taskDescription, 'failed', '❌ Code written but tests failed. Not committed.');
     }
 
     taskLog.push({
