@@ -425,15 +425,15 @@ async function executeTask(taskDescription, ctx = null) {
         content: `YOU ARE A CODE GENERATOR FOR REACT NATIVE + TYPESCRIPT.
 
 STRICT RULES - READ CAREFULLY:
-1. ONLY modify files shown in "CURRENT FILE" sections below. Do NOT invent new imports.
+1. You MAY modify existing files OR create NEW files as needed for the task.
 2. ONLY use packages that exist in package.json. NEVER import a package not listed there.
 3. NEVER import "expo-router" — it is NOT in this project.
-4. ALWAYS keep the existing import style and structure of each file.
+4. ALWAYS keep the existing import style and structure when modifying files.
 5. ALWAYS provide COMPLETE file content — no truncation, no "// rest stays the same".
 6. ALWAYS start each file with: File: <path>
 7. NO markdown fences (no \`\`\`typescript, no \`\`\`). Raw code only.
 8. NO explanations before or after the code.
-9. IMPORTANT: Only output ONE file per response. If the task needs multiple files, output only the most important one first.
+9. Only output ONE file per response.
 
 IF YOU CANNOT DO THE TASK: respond "INCOMPLETE: <reason>"`,
       },
