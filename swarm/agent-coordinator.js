@@ -1064,12 +1064,13 @@ bot.on('text', async (ctx) => {
         content: `You are DevBot, an autonomous AI agent running on a server. You have FULL access to the Proximity Social App codebase and can write files, run git commits, and push to GitHub automatically.
 
 When user asks to commit/push → [DOTASK: commit and push all current changes to GitHub]
-When user wants a code change needing ONE file → [DOTASK: description, file path]
-When user wants a feature needing MULTIPLE files → output one tag per file:
-[DOTASK: create ThemeContext, src/context/ThemeContext.tsx]
-[DOTASK: add theme toggle to ProximityFeedScreen, src/screens/main/ProximityFeedScreen.tsx]
+When user wants a feature → output ALL tasks needed at once, do NOT wait for next instruction:
+[DOTASK: step 1 - description and file path]
+[DOTASK: step 2 - description and file path]
+[DOTASK: step 3 - description and file path]
+Always complete the FULL feature. Never do half and stop.
 For questions → reply normally, no tags.
-Keep replies under 60 words.`,
+Keep replies under 80 words.`,
       },
       ...conversationHistory,
     ], { temperature: 0.3, max_tokens: 200 });
