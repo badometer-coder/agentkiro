@@ -135,7 +135,7 @@ class MultiLLMProvider {
             const modelConfig = {
               model: 'gemini-3.5-flash-lite',
               generationConfig: {
-                maxOutputTokens: options.max_tokens || 16384,
+                maxOutputTokens: 8192,  // Always use high limit for Gemini regardless of options
                 temperature: options.temperature || 0.3,
               },
             };
