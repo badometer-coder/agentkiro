@@ -427,7 +427,7 @@ async function readProjectFiles(appPath, taskDescription = '') {
   return context;
 }
 
-async function executeTask(taskDescription, ctx = null) {
+async function executeTask(taskDescription, ctx = null, noCommit = false) {
   try {
     const stats = llmProvider.getStats();
     console.log(`💻 Dev Agent: Executing task (Provider: ${stats.currentProvider})...`);
@@ -673,7 +673,7 @@ OUTPUT: Modified file(s) only. Start each with "File: <path>" then the complete 
     }
 
     // === AUTO-COMMIT TO GITHUB (only if tests passed) ===
-    if (savedFiles.length > 0 && testPassed) {
+    if (savedFiles.length > 0 && testPassed && !noCommit) {
       const githubToken = process.env.GITHUB_TOKEN;
       try {
         const { execSync } = await import('child_process');
@@ -1382,7 +1382,8 @@ REAL HOOK APIs:
 
 REAL UTILS exports: formatDistance, getSignalStrength, getSignalBars, getPresenceStatus, getPresenceColor, formatRelativeTime, getInitials, formatTime — NO "calculateDistanceKm"`;
 
-    // Fix each broken file separately
+    // Fix each broken file separately but commit only once at the end
+    const appPath = process.env.PROJECT_PATH || '/opt/render/project/proximity-app';
     for (const [file, errors] of Object.entries(errorsByFile)) {
       const fileErrors = errors.join('\n');
       const fixTask = `Fix ONLY the file "${file}" to resolve these TypeScript errors. Do NOT change any other files. Do NOT change logic — only fix type errors.
@@ -1393,10 +1394,27 @@ ${fileErrors}`;
 
       console.log(`🔧 Auto-fixing ${file}...`);
       try {
-        await executeTask(fixTask, telegramBotContext);
+        await executeTask(fixTask, telegramBotContext, true); // noCommit=true
       } catch (err) {
         console.error(`❌ CI auto-fix failed for ${file}: ${err.message}`);
       }
+    }
+
+    // Single commit for all fixes
+    try {
+      const { execSync } = await import('child_process');
+      const githubToken = process.env.GITHUB_TOKEN;
+      execSync(`git -C "${appPath}" config user.email "agent@proximity.app"`, { stdio: 'pipe' });
+      execSync(`git -C "${appPath}" config user.name "AI Agent"`, { stdio: 'pipe' });
+      if (githubToken) {
+        execSync(`git -C "${appPath}" remote set-url origin https://${githubToken}@github.com/badometer-coder/proximity-app.git`, { stdio: 'pipe' });
+      }
+      execSync(`git -C "${appPath}" add -A`, { stdio: 'pipe' });
+      execSync(`git -C "${appPath}" commit -m "CI fix: resolve TypeScript errors (${Object.keys(errorsByFile).length} files)"`, { stdio: 'pipe' });
+      execSync(`git -C "${appPath}" push origin main`, { stdio: 'pipe' });
+      console.log(`✅ CI fix committed in single push`);
+    } catch (gitError) {
+      console.log(`⚠️ CI fix commit failed: ${gitError.message.split('\n')[0]}`);
     }
 
     ciFixAttempts = 0;
