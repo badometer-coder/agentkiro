@@ -160,8 +160,43 @@ function isEnvironmentError(error) {
   return ENVIRONMENT_ERRORS.some(e => error.includes(e));
 }
 
-// Track if npm install has already run this session
-let npmInstallDone = false;
+// Files the agent must NEVER fully rewrite — only targeted changes allowed
+const PROTECTED_FILES = [
+  'App.tsx',
+  'index.ts',
+  'app.json',
+  'package.json',
+  'tsconfig.json',
+];
+
+// After saving a file, validate it wasn't completely rewritten with wrong content
+function validateSavedFile(filePath, code) {
+  const fileName = path.basename(filePath);
+
+  if (PROTECTED_FILES.includes(fileName)) {
+    // Must contain real screen imports, not placeholders
+    if (code.includes('Placeholder') || code.includes('placeholder')) {
+      console.log(`🛡️ BLOCKED: ${fileName} contains placeholder content`);
+      return false;
+    }
+    // Must not import packages that don't exist in the project
+    const bannedImports = ['expo-router', 'expo-font', 'expo-splash-screen', 'expo-linear-gradient'];
+    for (const banned of bannedImports) {
+      if (code.includes(`from '${banned}'`) || code.includes(`from "${banned}"`)) {
+        console.log(`🛡️ BLOCKED: ${fileName} imports banned package: ${banned}`);
+        return false;
+      }
+    }
+    // App.tsx must keep the original screen imports
+    if (fileName === 'App.tsx') {
+      if (!code.includes('useAuth') || !code.includes('LoginScreen')) {
+        console.log(`🛡️ BLOCKED: App.tsx missing required imports (useAuth, LoginScreen)`);
+        return false;
+      }
+    }
+  }
+  return true;
+}
 
 async function runTests(appPath) {
   try {
@@ -466,6 +501,12 @@ OUTPUT: Modified file(s) only. Start each with "File: <path>" then the complete 
         continue;
       }
 
+      // Validate protected files before saving
+      if (!validateSavedFile(cleanPath, code)) {
+        console.log(`🛡️ Skipping ${cleanPath} — failed protection check`);
+        continue;
+      }
+
       const fullPath = path.join(appPath, cleanPath);
 
       console.log(`💾 Saving to: ${fullPath}`);
@@ -557,6 +598,11 @@ OUTPUT: Modified file(s) only. Start each with "File: <path>" then the complete 
 
         const code = codeBlock.trim();
         if (code.length < 10) continue;
+
+        if (!validateSavedFile(cleanPath, code)) {
+          console.log(`🛡️ Skipping fixed ${cleanPath} — failed protection check`);
+          continue;
+        }
 
         const fullPath = path.join(appPath, cleanPath);
         try {
