@@ -1253,20 +1253,13 @@ async function startBot() {
 
 startBot();
 
-// Handle CI errors from GitHub Actions webhook
+// CI error notification — notifies via Telegram but does NOT auto-fix (prevents loops)
 setCIErrorCallback(async (errorMessage) => {
-  console.log(`🔧 Auto-fixing CI error: ${errorMessage}`);
+  console.log(`🚨 CI Error: ${errorMessage}`);
   if (telegramBotContext) {
     await telegramBotContext.telegram.sendMessage(
       telegramBotContext.chat.id,
-      `🚨 GitHub Action failed!\n\n${errorMessage}\n\n🔧 Auto-fixing...`
-    ).catch(() => {});
-  }
-  const result = await executeTask(`Fix this CI/build error: ${errorMessage}`);
-  if (result && telegramBotContext) {
-    await telegramBotContext.telegram.sendMessage(
-      telegramBotContext.chat.id,
-      `✅ Fix applied and pushed. GitHub Action will re-run automatically.`
+      `🚨 GitHub Action failed!\n\nCheck: ${errorMessage}\n\nTell me what to fix if needed.`
     ).catch(() => {});
   }
 });
