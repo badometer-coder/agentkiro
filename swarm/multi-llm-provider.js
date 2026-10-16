@@ -114,10 +114,10 @@ class MultiLLMProvider {
         if (provider.type === 'groq') {
           try {
             response = await provider.client.chat.completions.create({
-              model: options.model || 'qwen/qwen3.8-27b',
+              model: options.model || 'llama-3.3-70b-versatile',
               messages: messages,
               temperature: options.temperature || 0.7,
-              max_tokens: options.max_tokens || 4096,  // Increased from 800/900
+              max_tokens: options.max_tokens || 800,
             });
             const content = response.choices[0]?.message?.content || '';
             console.log(`✅ ${provider.name} succeeded`);
