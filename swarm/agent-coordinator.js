@@ -1094,6 +1094,12 @@ APP FILE STRUCTURE:
 - src/hooks/proximity/useNearbyPeers.ts
 - src/constants/theme.ts
 - src/config/supabase.ts
+- App.tsx (ROOT file — controls navigation between screens)
+
+ARCHITECTURE RULES — CRITICAL:
+- Bottom navigation / tab bars / footers ALWAYS go in App.tsx using @react-navigation/bottom-tabs
+- NEVER add navigation chrome (tab bars, bottom nav, footers) to individual screens
+- @expo/vector-icons (Ionicons, MaterialIcons) is ALWAYS available — no need to check package.json
 
 RULES:
 1. When the user says "add the feature" or refers to something vague, look at the conversation history to figure out what feature they mean — then write a SPECIFIC task description including the exact file path and what code to add/change.
