@@ -31,7 +31,9 @@ const llmProvider = new MultiLLMProvider(process.env, notifyRateLimit);
 // Initialize Memory Manager
 const memory = new MemoryManager(process.env);
 
-const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
+const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN, {
+  handlerTimeout: 10 * 60 * 1000, // 10 minutes — tasks take time
+});
 
 const APP_REQUIREMENTS = `
 PROXIMITY SOCIAL APP - DEVELOPMENT REQUIREMENTS
@@ -1038,9 +1040,9 @@ Keep replies under 40 words.`,
           execSync(`git -C "${appPath}" push origin main`, { stdio: 'pipe' });
           await ctx.reply(`✅ Committed and pushed to GitHub!`);
         } catch (gitError) {
-          const msg = gitError.message + (gitError.stderr || '');
-          if (msg.includes('nothing to commit')) {
-            await ctx.reply(`✅ Nothing new to commit — already up to date.`);
+          const msg = (gitError.stdout || '') + (gitError.stderr || '') + gitError.message;
+          if (msg.includes('nothing to commit') || msg.includes('up to date')) {
+            await ctx.reply(`✅ Nothing new to commit — repo is already up to date.`);
           } else {
             await ctx.reply(`⚠️ Git error: ${msg.substring(0, 300)}`);
           }
