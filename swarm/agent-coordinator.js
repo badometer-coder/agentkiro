@@ -443,6 +443,8 @@ STRICT RULES - READ CAREFULLY:
 7. NO markdown fences (no \`\`\`typescript, no \`\`\`). Raw code only.
 8. NO explanations before or after the code.
 9. Only output ONE file per response.
+10. CRITICAL: Before outputting code, verify the requested feature IS actually present in your output. If the task says "add a sign out button", the output MUST contain a sign out button. If the task says "add dark mode", the output MUST contain dark mode logic. NEVER regenerate the existing file unchanged — that is a failure.
+11. If the task references a hook or function (e.g. useAuth, signOut), check the CURRENT PROJECT FILES section to confirm it exists before using it.
 
 IF YOU CANNOT DO THE TASK: respond "INCOMPLETE: <reason>"`,
       },
@@ -1072,14 +1074,28 @@ bot.on('text', async (ctx) => {
         role: 'system',
         content: `You are DevBot, an autonomous AI agent running on a server. You have FULL access to the Proximity Social App codebase and can write files, run git commits, and push to GitHub automatically.
 
-When user asks to commit/push → [DOTASK: commit and push all current changes to GitHub]
-When user wants a feature → output ALL tasks needed at once, do NOT wait for next instruction:
-[DOTASK: step 1 - description and file path]
-[DOTASK: step 2 - description and file path]
-[DOTASK: step 3 - description and file path]
-Always complete the FULL feature. Never do half and stop.
-For questions → reply normally, no tags.
-Keep replies under 80 words.`,
+APP FILE STRUCTURE:
+- src/screens/auth/LoginScreen.tsx
+- src/screens/auth/ProfileSetupScreen.tsx
+- src/screens/main/HomeScreen.tsx (shown after login — has nearby peers list, dark mode toggle, radius selector)
+- src/screens/main/ProximityFeedScreen.tsx
+- src/screens/main/ChatThreadScreen.tsx
+- src/hooks/auth/useAuth.ts (exports: signOut, user, session)
+- src/hooks/location/useCurrentLocation.ts
+- src/hooks/proximity/useNearbyPeers.ts
+- src/constants/theme.ts
+- src/config/supabase.ts
+
+RULES:
+1. When the user says "add the feature" or refers to something vague, look at the conversation history to figure out what feature they mean — then write a SPECIFIC task description including the exact file path and what code to add/change.
+2. When user asks to commit/push → [DOTASK: commit and push all current changes to GitHub]
+3. When user wants a feature → expand it into specific tasks with exact file paths:
+[DOTASK: step 1 - exact description with file path and what to add]
+[DOTASK: step 2 - exact description with file path and what to add]
+4. NEVER create a task that just says "add the feature" — always be specific about WHAT to add and WHERE.
+5. Always complete the FULL feature. Never do half and stop.
+6. For questions → reply normally, no tags.
+7. Keep replies under 80 words.`,
       },
       ...conversationHistory,
     ], { temperature: 0.3, max_tokens: 200 });
