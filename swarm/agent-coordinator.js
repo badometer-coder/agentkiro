@@ -1334,14 +1334,32 @@ setCIErrorCallback(async (errorMessage) => {
   if (errorLines.length > 0) {
     const fixTask = `Fix the following TypeScript errors in the proximity app so the CI build passes. Do NOT change any logic or features — only fix the type errors.
 
-REAL HOOK APIs (use EXACTLY these — do not invent properties):
-- useCurrentLocation() returns: { location: GPSCoordinates|null, isLoading: boolean, error: string|null, permissionStatus: string, requestPermission: () => Promise<boolean> }
-- useNearbyPeers(location: GPSCoordinates|null) returns: { peers: FormattedNearbyPeer[], selectedRadius: number, isLoading: boolean, isRefreshing: boolean, error: ApiError|null, lastFetchedAt: string|null, setRadius: (r: number) => void, refresh: () => Promise<void> }
+REAL TYPE DEFINITIONS (use EXACTLY these):
+
+interface NearbyPeer {
+  id: string; username: string; full_name: string; age: number;
+  avatar_url: string | null; is_ble_discoverable: boolean;
+  distance_meters: number; last_active_at: string;
+}
+interface FormattedNearbyPeer extends NearbyPeer {
+  formatted_distance: string; signal_strength: SignalStrength; presence_status: UserPresenceStatus;
+}
+interface ApiError { code: string; message: string; details?: Record<string, unknown>; }
+
+REAL COMPONENT PROPS:
+- Avatar: { uri: string|null, name: string, size?: number } — NOT "url", use "uri"
+- SignalIndicator: check SignalIndicatorProps in the file — NOT "rssi" or "rssi_dbm"
+- NearbyPeerCard: { peer: FormattedNearbyPeer, onPress: () => void } — NO "onWave"
+- EmptyState: { icon: any, title: string, description: string } — NOT "message", use "description"
+
+REAL HOOK APIs:
+- useNearbyPeers(location: GPSCoordinates|null) returns: { peers: FormattedNearbyPeer[], selectedRadius: number, isLoading: boolean, isRefreshing: boolean, error: ApiError|null, lastFetchedAt: string|null, setRadius: (r: number)=>void, refresh: ()=>Promise<void> }
+- useCurrentLocation() returns: { location: GPSCoordinates|null, isLoading: boolean, error: string|null, permissionStatus: string, requestPermission: ()=>Promise<boolean> }
 - useAuth() returns: { user: User|null, session: Session|null, loading: boolean, signIn, signUp, signOut }
-- EmptyState props: { icon: any, title: string, description: string, actionLabel?: string, onAction?: () => void }
-- NearbyPeerCard props: { peer: FormattedNearbyPeer, onPress: () => void }
-- RadiusSlider props: { value: number, onValueChange: (val: number) => void }
-- ProximityHeader props: { lastUpdated: string|null }
+
+REAL UTILS (src/lib/utils/index.ts exports): formatDistance, getSignalStrength, getSignalBars, getPresenceStatus, getPresenceColor, formatRelativeTime, getInitials, formatTime — NO "calculateDistanceKm"
+
+ApiError MUST have both "code" AND "message" fields. Never set error to just { message: string }.
 
 ERRORS TO FIX:
 ${errorLines}`;
