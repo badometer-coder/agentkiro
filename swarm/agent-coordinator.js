@@ -1315,11 +1315,36 @@ setCIErrorCallback(async (errorMessage) => {
   setTimeout(() => seenCIErrors.delete(errorKey), 30 * 60 * 1000);
 
   console.log(`🚨 CI Error: ${errorMessage}`);
+
+  // Notify via Telegram
   if (telegramBotContext) {
     await telegramBotContext.telegram.sendMessage(
       telegramBotContext.chat.id,
-      `🚨 GitHub Action failed!\n\nCheck: ${errorMessage}\n\nTell me what to fix if needed.`
+      `🚨 GitHub CI failed! Auto-fixing...\n\n${errorMessage.substring(0, 300)}`
     ).catch(() => {});
+  }
+
+  // Auto-fix: extract TS errors and queue a fix task
+  const errorLines = errorMessage
+    .split('\n')
+    .filter(l => l.includes('error TS'))
+    .slice(0, 5)
+    .join('\n');
+
+  if (errorLines.length > 0) {
+    const fixTask = `Fix the following TypeScript errors in the proximity app so the CI build passes. Do NOT change any logic or features — only fix the type errors:\n\n${errorLines}`;
+    console.log(`🔧 Auto-queuing CI fix task...`);
+    try {
+      const result = await executeTask(fixTask, telegramBotContext);
+      if (result && telegramBotContext) {
+        await telegramBotContext.telegram.sendMessage(
+          telegramBotContext.chat.id,
+          `✅ CI auto-fix applied. Waiting for next CI run to confirm.`
+        ).catch(() => {});
+      }
+    } catch (err) {
+      console.error(`❌ CI auto-fix failed: ${err.message}`);
+    }
   }
 });
 
