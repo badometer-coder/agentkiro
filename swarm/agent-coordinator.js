@@ -7,17 +7,17 @@ import MultiLLMProvider from './multi-llm-provider.js';
 import MemoryManager from './memory-manager.js';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
+import { startHealthServer, setCIErrorCallback } from './health-server.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 dotenv.config();
 
-// Start health server for Render keep-alive
-spawn('node', [path.join(__dirname, 'health-server.js')]);
+// Start health server in-process (handles /ci-error webhook from GitHub Actions)
+startHealthServer();
 
 // Notification function for rate limits
 let telegramBotContext = null;
-
 function notifyRateLimit(message) {
   console.log(`📢 NOTIFICATION: ${message}`);
   if (telegramBotContext) {
@@ -1217,6 +1217,24 @@ async function startBot() {
 }
 
 startBot();
+
+// Handle CI errors from GitHub Actions webhook
+setCIErrorCallback(async (errorMessage) => {
+  console.log(`🔧 Auto-fixing CI error: ${errorMessage}`);
+  if (telegramBotContext) {
+    await telegramBotContext.telegram.sendMessage(
+      telegramBotContext.chat.id,
+      `🚨 GitHub Action failed!\n\n${errorMessage}\n\n🔧 Auto-fixing...`
+    ).catch(() => {});
+  }
+  const result = await executeTask(`Fix this CI/build error: ${errorMessage}`);
+  if (result && telegramBotContext) {
+    await telegramBotContext.telegram.sendMessage(
+      telegramBotContext.chat.id,
+      `✅ Fix applied and pushed. GitHub Action will re-run automatically.`
+    ).catch(() => {});
+  }
+});
 
 // Graceful shutdown
 process.once('SIGINT', () => {

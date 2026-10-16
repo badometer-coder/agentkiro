@@ -1,29 +1,51 @@
 import http from 'http';
 
-// Render requires the app to bind to PORT env variable
 const port = process.env.PORT || 10000;
-const RENDER_URL = process.env.RENDER_EXTERNAL_URL || 'https://agent-swarm-ceti.onrender.com';
+
+// ciErrorCallback is set by agent-coordinator after bot launches
+let ciErrorCallback = null;
+
+export function setCIErrorCallback(fn) {
+  ciErrorCallback = fn;
+}
 
 const server = http.createServer((req, res) => {
-  res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime()
-  }));
+  // Health check - GET any path
+  if (req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ status: 'ok', uptime: process.uptime() }));
+    return;
+  }
+
+  // CI error webhook from GitHub Actions
+  if (req.method === 'POST' && req.url === '/ci-error') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { error } = JSON.parse(body);
+        console.log(`🚨 CI Error received: ${error}`);
+        if (ciErrorCallback) ciErrorCallback(error);
+        res.writeHead(200);
+        res.end('ok');
+      } catch (e) {
+        res.writeHead(400);
+        res.end('bad request');
+      }
+    });
+    return;
+  }
+
+  res.writeHead(404);
+  res.end();
 });
 
-server.listen(port, () => {
-  console.log(`🏥 Health server running on port ${port}`);
-
-  // Ping self every 10 minutes to prevent Render free tier sleep
-  setInterval(() => {
-    http.get(`http://localhost:${port}/health`, (res) => {
-      console.log(`🏥 Self-ping: ${res.statusCode}`);
-    }).on('error', () => {});
-  }, 10 * 60 * 1000);
-});
-
-process.on('SIGTERM', () => {
-  server.close();
-});
+export function startHealthServer() {
+  server.listen(port, () => {
+    console.log(`🏥 Health server on port ${port}`);
+    // Self-ping every 10 min to prevent Render sleep
+    setInterval(() => {
+      http.get(`http://localhost:${port}/`, () => {}).on('error', () => {});
+    }, 10 * 60 * 1000);
+  });
+}
