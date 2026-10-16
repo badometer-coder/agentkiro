@@ -414,6 +414,7 @@ STRICT RULES - READ CAREFULLY:
 6. ALWAYS start each file with: File: <path>
 7. NO markdown fences (no \`\`\`typescript, no \`\`\`). Raw code only.
 8. NO explanations before or after the code.
+9. IMPORTANT: Only output ONE file per response. If the task needs multiple files, output only the most important one first.
 
 IF YOU CANNOT DO THE TASK: respond "INCOMPLETE: <reason>"`,
       },
@@ -1043,10 +1044,13 @@ bot.on('text', async (ctx) => {
         role: 'system',
         content: `You are DevBot, an autonomous AI agent running on a server. You have FULL access to the Proximity Social App codebase and can write files, run git commits, and push to GitHub automatically.
 
-When user asks you to commit/push → respond with [DOTASK: commit and push all current changes to GitHub]
-When user wants a code change → respond with [DOTASK: exact description of change and file]
-For questions/status → reply normally, no tags.
-Keep replies under 40 words.`,
+When user asks to commit/push → [DOTASK: commit and push all current changes to GitHub]
+When user wants a code change needing ONE file → [DOTASK: description, file path]
+When user wants a feature needing MULTIPLE files → output one tag per file:
+[DOTASK: create ThemeContext, src/context/ThemeContext.tsx]
+[DOTASK: add theme toggle to ProximityFeedScreen, src/screens/main/ProximityFeedScreen.tsx]
+For questions → reply normally, no tags.
+Keep replies under 60 words.`,
       },
       ...conversationHistory,
     ], { temperature: 0.3, max_tokens: 200 });
@@ -1056,7 +1060,9 @@ Keep replies under 40 words.`,
 
     // Parse action tags
     const cleanReply = llmReply.replace(/\[(DOTASK|DOPLAN|RUN):[^\]]*\]/g, '').trim();
-    const taskMatch = llmReply.match(/\[DOTASK:\s*([^\]]+)\]/);
+    // Support multiple [DOTASK:] tags for multi-file features
+    const taskMatches = [...llmReply.matchAll(/\[DOTASK:\s*([^\]]+)\]/g)].map(m => m[1].trim());
+    const taskMatch = taskMatches.length > 0 ? { 1: taskMatches[0] } : null;
     let planMatch = llmReply.match(/\[DOPLAN:\s*([^\]]+)\]/);
     const runMatch2 = llmReply.match(/\[RUN:\s*(\d+)\]/);
 
@@ -1068,8 +1074,12 @@ Keep replies under 40 words.`,
 
     if (cleanReply) await ctx.reply(cleanReply);
 
-    if (taskMatch) {
-      const specificTask = taskMatch[1].trim();
+    if (taskMatches.length > 0) {
+      if (taskMatches.length > 1) {
+        await ctx.reply(`📋 Breaking into ${taskMatches.length} steps...`);
+      }
+      for (let i = 0; i < taskMatches.length; i++) {
+        const specificTask = taskMatches[i];
 
       // Handle commit/push requests directly without LLM code generation
       if (specificTask.toLowerCase().includes('commit') || specificTask.toLowerCase().includes('push')) {
@@ -1098,15 +1108,17 @@ Keep replies under 40 words.`,
         }
         return;
       }
-      await ctx.reply(`⚙️ Working on it...`);
+      if (taskMatches.length > 1) await ctx.reply(`⚙️ [${i+1}/${taskMatches.length}] ${specificTask.substring(0, 60)}...`);
+      else await ctx.reply(`⚙️ Working on it...`);
       const result = await executeTask(specificTask, ctx);
       if (result) {
         memory.recordTaskCompletion(specificTask, true, result, llmProvider.getCurrentProvider().name, 0);
-        const preview = result.substring(0, 600);
-        await ctx.reply(`✅ Done!\n\n${preview}${result.length > 600 ? '\n...(full code saved)' : ''}`);
+        const preview = result.substring(0, 400);
+        await ctx.reply(`✅ Step ${i+1} done!\n\n${preview}${result.length > 400 ? '\n...(full code saved)' : ''}`);
       } else {
-        await ctx.reply(`❌ Couldn't complete that task. Try being more specific.`);
+        await ctx.reply(`❌ Step ${i+1} failed. Try being more specific.`);
       }
+      }  // end for loop
     } else if (planMatch) {
       const topic = planMatch[1].trim();
       await ctx.reply(`📋 Creating plan for: ${topic}`);
