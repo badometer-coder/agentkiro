@@ -133,7 +133,7 @@ class MultiLLMProvider {
 
             // Gemini requires systemInstruction as { parts: [{ text }] }, NOT a plain string
             const modelConfig = {
-              model: 'gemini-2.5-flash',
+              model: 'gemini-3.5-flash-lite',
               generationConfig: {
                 maxOutputTokens: options.max_tokens || 16384,
                 temperature: options.temperature || 0.3,
