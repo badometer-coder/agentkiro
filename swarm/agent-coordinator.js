@@ -1254,7 +1254,20 @@ async function startBot() {
 startBot();
 
 // CI error notification — notifies via Telegram but does NOT auto-fix (prevents loops)
+// Track seen CI errors to prevent duplicate processing
+const seenCIErrors = new Set();
+
 setCIErrorCallback(async (errorMessage) => {
+  // Deduplicate — same error URL should only fire once
+  const errorKey = errorMessage.substring(0, 100);
+  if (seenCIErrors.has(errorKey)) {
+    console.log(`🔇 Duplicate CI error ignored: ${errorKey}`);
+    return;
+  }
+  seenCIErrors.add(errorKey);
+  // Clear after 30 min to allow re-triggering on new failures
+  setTimeout(() => seenCIErrors.delete(errorKey), 30 * 60 * 1000);
+
   console.log(`🚨 CI Error: ${errorMessage}`);
   if (telegramBotContext) {
     await telegramBotContext.telegram.sendMessage(
