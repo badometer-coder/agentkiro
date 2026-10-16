@@ -108,7 +108,7 @@ class MultiLLMProvider {
               model: options.model || 'qwen/qwen3.8-27b',
               messages: messages,
               temperature: options.temperature || 0.7,
-              max_tokens: options.max_tokens || 800,
+              max_tokens: options.max_tokens || 4096,  // Increased from 800/900
             });
             const content = response.choices[0]?.message?.content || '';
             console.log(`✅ ${provider.name} succeeded`);
