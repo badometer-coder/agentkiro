@@ -1038,11 +1038,11 @@ Keep replies under 40 words.`,
           execSync(`git -C "${appPath}" push origin main`, { stdio: 'pipe' });
           await ctx.reply(`✅ Committed and pushed to GitHub!`);
         } catch (gitError) {
-          const msg = gitError.message.split('\n')[0];
+          const msg = gitError.message + (gitError.stderr || '');
           if (msg.includes('nothing to commit')) {
             await ctx.reply(`✅ Nothing new to commit — already up to date.`);
           } else {
-            await ctx.reply(`⚠️ Git error: ${msg}`);
+            await ctx.reply(`⚠️ Git error: ${msg.substring(0, 300)}`);
           }
         }
         return;
