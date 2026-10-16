@@ -956,7 +956,7 @@ bot.on('text', async (ctx) => {
     const llmReply = await llmProvider.callLLM([
       {
         role: 'system',
-        content: `You are DevBot, an AI building the Proximity Social App. Reply naturally. If user wants code work, respond with [DOTASK: description]. Never reveal your model name.`,
+        content: `You are DevBot, an AI building Proximity Social App (React Native + TypeScript). Reply naturally and helpfully.`,
       },
       ...conversationHistory,
     ], { temperature: 0.3, max_tokens: 200 });
