@@ -1591,6 +1591,31 @@ setCIErrorCallback(async (errorMessage) => {
   }
 
   console.log(`🚨 CI Error received — AUTO-FIX ENABLED (batch mode)`);
+
+  // Deduplicate — same CI run should only fire once (use run URL as key)
+  const errorKey = errorMessage.match(/runs\/(\d+)/)?.[1] || errorMessage.substring(0, 100);
+  if (seenCIErrors.has(errorKey)) {
+    console.log(`🔇 Duplicate CI error ignored: ${errorKey}`);
+    return;
+  }
+  seenCIErrors.add(errorKey);
+  // Clear after 30 min to allow re-triggering on new failures
+  setTimeout(() => seenCIErrors.delete(errorKey), 30 * 60 * 1000);
+
+  // Stop if too many consecutive fix attempts — prevent infinite loops
+  ciFixAttempts++;
+  if (ciFixAttempts > MAX_CI_FIX_ATTEMPTS) {
+    console.log(`🛑 CI auto-fix stopped after ${MAX_CI_FIX_ATTEMPTS} attempts. Manual intervention needed.`);
+    if (telegramBotContext) {
+      await telegramBotContext.telegram.sendMessage(
+        telegramBotContext.chat.id,
+        `🛑 CI auto-fix gave up after ${MAX_CI_FIX_ATTEMPTS} attempts. Too many errors — please review manually.\n\nLast errors:\n${errorMessage.substring(0, 400)}`
+      ).catch(() => {});
+    }
+    return;
+  }
+
+  console.log(`🚨 CI Error (attempt ${ciFixAttempts}/${MAX_CI_FIX_ATTEMPTS})`);
   
   // Notify via Telegram
   if (telegramBotContext) {
