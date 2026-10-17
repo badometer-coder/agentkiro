@@ -1461,6 +1461,18 @@ const MAX_CI_FIX_ATTEMPTS = 3;
 const seenCIErrors = new Set();
 
 setCIErrorCallback(async (errorMessage) => {
+  // Guard: ensure errorMessage is a string
+  if (!errorMessage || typeof errorMessage !== 'string') {
+    console.log(`⚠️ CI callback received invalid error: ${errorMessage}`);
+    if (telegramBotContext) {
+      await telegramBotContext.telegram.sendMessage(
+        telegramBotContext.chat.id,
+        `⚠️ CI webhook received but error message was empty. Skipping auto-fix.`
+      ).catch(() => {});
+    }
+    return;
+  }
+
   console.log(`🚨 CI Error received — AUTO-FIX ENABLED (batch mode)`);
   
   // Notify via Telegram
