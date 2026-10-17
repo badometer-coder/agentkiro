@@ -1220,9 +1220,80 @@ bot.on('text', async (ctx) => {
         
         await ctx.reply(`Found ${errorLines.length} error(s):\n\n${errorLines.slice(0, 3).join('\n')}${errorLines.length > 3 ? '\n...' : ''}\n\n🔧 Fixing automatically...`);
         
-        // Let the CI auto-fix webhook handle it
-        // Just notify that we're working
-        return ctx.reply('⏳ Agent is fixing errors...');
+        // Pass errors to CI callback directly (simulate webhook)
+        const { setCIErrorCallback } = await import('./health-server.js');
+        const errorMessage = output; // Pass full output with all errors
+        console.log(`📨 Manually triggering CI auto-fix with ${errorLines.length} error(s)`);
+        
+        // Get the callback function from health-server
+        // For now, just trigger the same logic inline
+        if (errorLines.length > 0) {
+          // Group errors by file path
+          const errorsByFile = {};
+          for (const line of errorLines) {
+            const fileMatch = line.match(/^([^(]+)\(\d+,\d+\)/);
+            if (fileMatch) {
+              const file = fileMatch[1].trim();
+              if (!errorsByFile[file]) errorsByFile[file] = [];
+              errorsByFile[file].push(line);
+            }
+          }
+
+          await ctx.reply(`🔧 Auto-fixing ${Object.keys(errorsByFile).length} file(s)...`);
+          
+          // Fix each broken file separately but commit only once at the end
+          for (const [file, errors] of Object.entries(errorsByFile)) {
+            const fileErrors = errors.join('\n');
+            
+            // Read the actual file content so agent can see what's broken
+            let fileContent = '';
+            try {
+              fileContent = fs.readFileSync(path.join(appPath, file), 'utf-8');
+            } catch (err) {
+              console.warn(`⚠️ Could not read ${file}: ${err.message}`);
+            }
+
+            const fixTask = `Fix ONLY the file "${file}" to resolve these TypeScript errors. Do NOT change any other files. Do NOT change logic — only fix type errors.
+
+${TYPE_DEFINITIONS_CONTEXT}
+
+CURRENT FILE CONTENT (read carefully before fixing):
+\`\`\`
+${fileContent}
+\`\`\`
+
+ERRORS IN ${file}:
+${fileErrors}`;
+
+            console.log(`🔧 Auto-fixing ${file}...`);
+            try {
+              await executeTask(fixTask, ctx, true); // noCommit=true, pass ctx for notifications
+            } catch (err) {
+              console.error(`❌ CI auto-fix failed for ${file}: ${err.message}`);
+            }
+          }
+
+          // Single commit for all fixes
+          try {
+            const { execSync: exec } = await import('child_process');
+            const githubToken = process.env.GITHUB_TOKEN;
+            exec(`git -C "${appPath}" config user.email "agent@proximity.app"`, { stdio: 'pipe' });
+            exec(`git -C "${appPath}" config user.name "AI Agent"`, { stdio: 'pipe' });
+            if (githubToken) {
+              exec(`git -C "${appPath}" remote set-url origin https://${githubToken}@github.com/badometer-coder/proximity-app.git`, { stdio: 'pipe' });
+            }
+            exec(`git -C "${appPath}" add -A`, { stdio: 'pipe' });
+            exec(`git -C "${appPath}" commit -m "CI fix: resolve TypeScript errors (${Object.keys(errorsByFile).length} files)"`, { stdio: 'pipe' });
+            exec(`git -C "${appPath}" push origin main`, { stdio: 'pipe' });
+            console.log(`✅ CI fix committed in single push`);
+            await ctx.reply(`✅ Fixed ${Object.keys(errorsByFile).length} file(s) and pushed!`);
+          } catch (gitError) {
+            console.log(`⚠️ CI fix commit failed: ${gitError.message.split('\n')[0]}`);
+            await ctx.reply(`⚠️ Fixes generated but commit failed: ${gitError.message.substring(0, 100)}`);
+          }
+        }
+        
+        return;
         
       } catch (err) {
         // tsc might not be available, but that's OK — webhook will handle it
