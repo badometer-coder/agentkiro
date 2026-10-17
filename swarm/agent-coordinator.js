@@ -200,6 +200,8 @@ function validateSavedFile(filePath, code) {
   return true;
 }
 
+let npmInstallDone = false;
+
 async function runTests(appPath) {
   try {
     console.log(`🧪 Testing code...`);
