@@ -225,8 +225,8 @@ async function runTests(appPath) {
     let realErrors = [];
 
     try {
-      execSync(`cd "${appPath}" && npx tsc --noEmit --skipLibCheck 2>&1`, {
-        encoding: 'utf-8', stdio: 'pipe', timeout: 30000,
+      execSync(`cd "${appPath}" && npx --yes tsc --noEmit --skipLibCheck 2>&1`, {
+        encoding: 'utf-8', stdio: 'pipe', timeout: 120000,
       });
       console.log(`✅ TypeScript check passed`);
     } catch (tscError) {
