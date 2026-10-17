@@ -1286,11 +1286,28 @@ bot.on('text', async (ctx) => {
           console.warn(`⚠️ Could not read ${file}: ${err.message}`);
         }
 
-        const fixTask = `Fix ONLY the file "${file}" to resolve these TypeScript errors. Do NOT change any other files. Do NOT change logic — only fix type errors.
+        // Always include type definition files so agent sees the real source of truth
+        let typesContent = '';
+        const typeFiles = [
+          'src/types/index.ts',
+          'src/lib/utils/index.ts',
+          'src/types/index.d.ts',
+        ];
+        for (const tf of typeFiles) {
+          try {
+            const content = fs.readFileSync(path.join(appPath, tf), 'utf-8');
+            typesContent += `\n\n=== ${tf} ===\n${content}`;
+          } catch { /* skip if not found */ }
+        }
+
+        const fixTask = `Fix ONLY the file "${file}" to resolve these TypeScript errors. Do NOT change any other files unless the error is a type definition conflict — in that case you may also fix src/types/index.ts.
 
 ${TYPE_DEFINITIONS_CONTEXT}
 
-CURRENT FILE CONTENT (read carefully before fixing):
+ACTUAL TYPE DEFINITION FILES (read these to understand real types — do NOT invent values):
+${typesContent}
+
+CURRENT FILE CONTENT (the file you are fixing):
 \`\`\`
 ${fileContent}
 \`\`\`
@@ -1613,11 +1630,28 @@ setCIErrorCallback(async (errorMessage) => {
         console.warn(`⚠️ Could not read ${file}: ${err.message}`);
       }
 
-      const fixTask = `Fix ONLY the file "${file}" to resolve these TypeScript errors. Do NOT change any other files. Do NOT change logic — only fix type errors.
+      // Always include type definition files so agent sees the real source of truth
+      let typesContent = '';
+      const typeFiles = [
+        'src/types/index.ts',
+        'src/lib/utils/index.ts',
+        'src/types/index.d.ts',
+      ];
+      for (const tf of typeFiles) {
+        try {
+          const content = fs.readFileSync(path.join(appPath, tf), 'utf-8');
+          typesContent += `\n\n=== ${tf} ===\n${content}`;
+        } catch { /* skip if not found */ }
+      }
+
+      const fixTask = `Fix ONLY the file "${file}" to resolve these TypeScript errors. Do NOT change any other files unless the error is a type definition conflict — in that case you may also fix src/types/index.ts.
 
 ${TYPE_DEFINITIONS_CONTEXT}
 
-CURRENT FILE CONTENT (read carefully before fixing):
+ACTUAL TYPE DEFINITION FILES (read these to understand real types — do NOT invent values):
+${typesContent}
+
+CURRENT FILE CONTENT (the file you are fixing):
 \`\`\`
 ${fileContent}
 \`\`\`
