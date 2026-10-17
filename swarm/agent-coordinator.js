@@ -1202,58 +1202,80 @@ bot.on('text', async (ctx) => {
       const appPath = process.env.PROJECT_PATH || '/opt/render/project/proximity-app';
       const { execSync } = await import('child_process');
       
+      // Make sure repo is cloned and up to date
       try {
-        // Run TypeScript check locally first
-        const output = execSync(`cd "${appPath}" && npx tsc --noEmit 2>&1`, { encoding: 'utf-8' }).trim();
-        if (!output || output.length === 0) {
-          return ctx.reply('✅ No TypeScript errors found! App looks good.');
+        if (!fs.existsSync(appPath)) {
+          await ctx.reply('📥 Cloning proximity-app repo...');
+          const token = process.env.GITHUB_TOKEN;
+          const repoUrl = token
+            ? `https://${token}@github.com/badometer-coder/proximity-app.git`
+            : `https://github.com/badometer-coder/proximity-app.git`;
+          execSync(`git clone ${repoUrl} "${appPath}"`, { stdio: 'pipe', timeout: 60000 });
+        } else {
+          execSync(`git -C "${appPath}" pull origin main`, { stdio: 'pipe', timeout: 30000 });
         }
-        
-        // Extract error messages
-        const errorLines = output
-          .split('\n')
-          .filter(l => l.includes('error TS'));
-        
-        if (errorLines.length === 0) {
-          return ctx.reply('✅ No TypeScript errors found!');
+      } catch (e) {
+        await ctx.reply(`⚠️ Could not sync repo: ${e.message.split('\n')[0]}`);
+      }
+
+      // Run TypeScript check — tsc exits 1 on errors, so catch the error to get output
+      let output = '';
+      try {
+        output = execSync(`cd "${appPath}" && npx --yes tsc --noEmit --skipLibCheck 2>&1`, {
+          encoding: 'utf-8',
+          timeout: 120000, // 2 min max
+        }).trim();
+      } catch (err) {
+        // tsc exits non-zero on errors — the output is in err.stdout
+        output = String(err.stdout || err.stderr || err.message || '').trim();
+      }
+
+      if (!output) {
+        return ctx.reply('✅ No TypeScript errors found! App looks good.');
+      }
+
+      // Extract error lines
+      const errorLines = output
+        .split('\n')
+        .filter(l => l.includes('error TS'));
+
+      if (errorLines.length === 0) {
+        return ctx.reply(`✅ No TypeScript errors found!\n\n(tsc output: ${output.substring(0, 200)})`);
+      }
+
+      await ctx.reply(`Found ${errorLines.length} error(s):\n\n${errorLines.slice(0, 5).join('\n')}${errorLines.length > 5 ? '\n...' : ''}\n\n🔧 Fixing automatically...`);
+
+      // Group errors by file path
+      const errorsByFile = {};
+      for (const line of errorLines) {
+        const fileMatch = line.match(/^([^(]+)\(\d+,\d+\)/);
+        if (fileMatch) {
+          const file = fileMatch[1].trim();
+          if (!errorsByFile[file]) errorsByFile[file] = [];
+          errorsByFile[file].push(line);
         }
-        
-        await ctx.reply(`Found ${errorLines.length} error(s):\n\n${errorLines.slice(0, 3).join('\n')}${errorLines.length > 3 ? '\n...' : ''}\n\n🔧 Fixing automatically...`);
-        
-        // Pass errors to CI callback directly (simulate webhook)
-        const { setCIErrorCallback } = await import('./health-server.js');
-        const errorMessage = output; // Pass full output with all errors
-        console.log(`📨 Manually triggering CI auto-fix with ${errorLines.length} error(s)`);
-        
-        // Get the callback function from health-server
-        // For now, just trigger the same logic inline
-        if (errorLines.length > 0) {
-          // Group errors by file path
-          const errorsByFile = {};
-          for (const line of errorLines) {
-            const fileMatch = line.match(/^([^(]+)\(\d+,\d+\)/);
-            if (fileMatch) {
-              const file = fileMatch[1].trim();
-              if (!errorsByFile[file]) errorsByFile[file] = [];
-              errorsByFile[file].push(line);
-            }
-          }
+      }
 
-          await ctx.reply(`🔧 Auto-fixing ${Object.keys(errorsByFile).length} file(s)...`);
-          
-          // Fix each broken file separately but commit only once at the end
-          for (const [file, errors] of Object.entries(errorsByFile)) {
-            const fileErrors = errors.join('\n');
-            
-            // Read the actual file content so agent can see what's broken
-            let fileContent = '';
-            try {
-              fileContent = fs.readFileSync(path.join(appPath, file), 'utf-8');
-            } catch (err) {
-              console.warn(`⚠️ Could not read ${file}: ${err.message}`);
-            }
+      const fileCount = Object.keys(errorsByFile).length;
+      if (fileCount === 0) {
+        return ctx.reply('⚠️ Could not parse file paths from errors. Raw output:\n' + output.substring(0, 500));
+      }
 
-            const fixTask = `Fix ONLY the file "${file}" to resolve these TypeScript errors. Do NOT change any other files. Do NOT change logic — only fix type errors.
+      await ctx.reply(`🔧 Auto-fixing ${fileCount} file(s)...`);
+
+      // Fix each broken file separately but commit only once at the end
+      for (const [file, errors] of Object.entries(errorsByFile)) {
+        const fileErrors = errors.join('\n');
+
+        // Read the actual file content so agent can see what's broken
+        let fileContent = '';
+        try {
+          fileContent = fs.readFileSync(path.join(appPath, file), 'utf-8');
+        } catch (err) {
+          console.warn(`⚠️ Could not read ${file}: ${err.message}`);
+        }
+
+        const fixTask = `Fix ONLY the file "${file}" to resolve these TypeScript errors. Do NOT change any other files. Do NOT change logic — only fix type errors.
 
 ${TYPE_DEFINITIONS_CONTEXT}
 
@@ -1265,41 +1287,37 @@ ${fileContent}
 ERRORS IN ${file}:
 ${fileErrors}`;
 
-            console.log(`🔧 Auto-fixing ${file}...`);
-            try {
-              await executeTask(fixTask, ctx, true); // noCommit=true, pass ctx for notifications
-            } catch (err) {
-              console.error(`❌ CI auto-fix failed for ${file}: ${err.message}`);
-            }
-          }
-
-          // Single commit for all fixes
-          try {
-            const { execSync: exec } = await import('child_process');
-            const githubToken = process.env.GITHUB_TOKEN;
-            exec(`git -C "${appPath}" config user.email "agent@proximity.app"`, { stdio: 'pipe' });
-            exec(`git -C "${appPath}" config user.name "AI Agent"`, { stdio: 'pipe' });
-            if (githubToken) {
-              exec(`git -C "${appPath}" remote set-url origin https://${githubToken}@github.com/badometer-coder/proximity-app.git`, { stdio: 'pipe' });
-            }
-            exec(`git -C "${appPath}" add -A`, { stdio: 'pipe' });
-            exec(`git -C "${appPath}" commit -m "CI fix: resolve TypeScript errors (${Object.keys(errorsByFile).length} files)"`, { stdio: 'pipe' });
-            exec(`git -C "${appPath}" push origin main`, { stdio: 'pipe' });
-            console.log(`✅ CI fix committed in single push`);
-            await ctx.reply(`✅ Fixed ${Object.keys(errorsByFile).length} file(s) and pushed!`);
-          } catch (gitError) {
-            console.log(`⚠️ CI fix commit failed: ${gitError.message.split('\n')[0]}`);
-            await ctx.reply(`⚠️ Fixes generated but commit failed: ${gitError.message.substring(0, 100)}`);
-          }
+        console.log(`🔧 Auto-fixing ${file}...`);
+        try {
+          await executeTask(fixTask, ctx, true); // noCommit=true
+        } catch (err) {
+          console.error(`❌ Auto-fix failed for ${file}: ${err.message}`);
         }
-        
-        return;
-        
-      } catch (err) {
-        // tsc might not be available, but that's OK — webhook will handle it
-        await ctx.reply('⏳ Checking GitHub Actions for errors...');
-        return ctx.reply('🔧 Agent will auto-fix when CI runs');
       }
+
+      // Single commit for all fixes
+      try {
+        const githubToken = process.env.GITHUB_TOKEN;
+        execSync(`git -C "${appPath}" config user.email "agent@proximity.app"`, { stdio: 'pipe' });
+        execSync(`git -C "${appPath}" config user.name "AI Agent"`, { stdio: 'pipe' });
+        if (githubToken) {
+          execSync(`git -C "${appPath}" remote set-url origin https://${githubToken}@github.com/badometer-coder/proximity-app.git`, { stdio: 'pipe' });
+        }
+        execSync(`git -C "${appPath}" add -A`, { stdio: 'pipe' });
+        execSync(`git -C "${appPath}" commit -m "CI fix: resolve TypeScript errors (${fileCount} files)"`, { stdio: 'pipe' });
+        execSync(`git -C "${appPath}" push origin main`, { stdio: 'pipe' });
+        console.log(`✅ CI fix committed in single push`);
+        await ctx.reply(`✅ Fixed ${fileCount} file(s) and pushed to GitHub!`);
+      } catch (gitError) {
+        const errMsg = String(gitError.stdout || gitError.stderr || gitError.message || '');
+        if (errMsg.includes('nothing to commit') || errMsg.includes('up to date')) {
+          await ctx.reply('⚠️ No changes to commit — fixes may not have generated valid code. Check logs.');
+        } else {
+          await ctx.reply(`⚠️ Fixes generated but push failed: ${errMsg.substring(0, 200)}`);
+        }
+      }
+
+      return;
     }
 
     // --- LLM handles everything else (including "make a change on login", "plan about X", etc.) ---
