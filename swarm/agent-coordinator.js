@@ -503,14 +503,20 @@ STRICT RULES - READ CAREFULLY:
 1. You MAY modify existing files OR create NEW files as needed for the task.
 2. ONLY use packages that exist in package.json. NEVER import a package not listed there.
 3. NEVER import "expo-router" — it is NOT in this project.
-4. ALWAYS keep the existing import style and structure when modifying files.
-5. ALWAYS provide COMPLETE file content — no truncation, no "// rest stays the same".
-6. ALWAYS start each file with: File: <path>
-7. NO markdown fences (no \`\`\`typescript, no \`\`\`). Raw code only.
-8. NO explanations before or after the code.
-9. Only output ONE file per response.
-10. CRITICAL: Before outputting code, verify the requested feature IS actually present in your output. If the task says "add a sign out button", the output MUST contain a sign out button. If the task says "add dark mode", the output MUST contain dark mode logic. NEVER regenerate the existing file unchanged — that is a failure.
-11. If the task references a hook or function (e.g. useAuth, signOut), check the CURRENT PROJECT FILES section to confirm it exists before using it.
+4. ALWAYS provide COMPLETE file content — no truncation, no "// rest stays the same".
+5. ALWAYS start each file with: File: <path>
+6. NO markdown fences (no \`\`\`typescript, no \`\`\`). Raw code only.
+7. NO explanations before or after the code.
+8. Only output ONE file per response.
+9. CRITICAL: Before outputting code, verify the requested feature IS actually present in your output. If the task says "add a sign out button", the output MUST contain a sign out button. If the task says "add dark mode", the output MUST contain dark mode logic. NEVER regenerate the existing file unchanged — that is a failure.
+10. If the task references a hook or function (e.g. useAuth, signOut), check the CURRENT PROJECT FILES section to confirm it exists before using it.
+
+IMPORT RULES — CRITICAL (violating these breaks the build):
+11. Each import statement must appear EXACTLY ONCE. Never add duplicate imports.
+12. When modifying a file, copy the existing imports from the CURRENT FILE CONTENT and modify them — do NOT invent new import sources.
+13. NEVER import from a module that doesn't exist. If you're unsure, check the CURRENT PROJECT FILES for the correct import path.
+14. React Native imports come from 'react-native' — NEVER from any other package name.
+15. Do NOT write comments like "// wait, react-native" or "// TODO" in the code. Output clean, final code only.
 
 ${TYPE_DEFINITIONS_CONTEXT}
 
@@ -541,7 +547,7 @@ OUTPUT: Modified file(s) only. Start each with "File: <path>" then the complete 
       result = await Promise.race([
         llmProvider.callLLM(messages, {
           temperature: 0.3,
-          max_tokens: 1500,  // Increased — CI fix tasks need multiple complete files
+          max_tokens: 4000,  // Increased — complex files need more space to avoid truncation
           timeout: 6 * 60 * 1000,
         }),
         new Promise((_, reject) =>
@@ -1323,25 +1329,51 @@ ${fileErrors}`;
         }
       }
 
-      // Single commit for all fixes
+      // Pre-commit verification: check if tsc errors actually decreased
+      let shouldCommit = true;
+      let newErrorCount = 0;
       try {
-        const githubToken = process.env.GITHUB_TOKEN;
-        execSync(`git -C "${appPath}" config user.email "agent@proximity.app"`, { stdio: 'pipe' });
-        execSync(`git -C "${appPath}" config user.name "AI Agent"`, { stdio: 'pipe' });
-        if (githubToken) {
-          execSync(`git -C "${appPath}" remote set-url origin https://${githubToken}@github.com/badometer-coder/proximity-app.git`, { stdio: 'pipe' });
+        let postOutput = '';
+        try {
+          postOutput = execSync(`cd "${appPath}" && npx --yes tsc --noEmit --skipLibCheck 2>&1`, {
+            encoding: 'utf-8',
+            timeout: 120000,
+          });
+        } catch (err) {
+          postOutput = String(err.stdout || err.stderr || '');
         }
-        execSync(`git -C "${appPath}" add -A`, { stdio: 'pipe' });
-        execSync(`git -C "${appPath}" commit -m "CI fix: resolve TypeScript errors (${fileCount} files)"`, { stdio: 'pipe' });
-        execSync(`git -C "${appPath}" push origin main`, { stdio: 'pipe' });
-        console.log(`✅ CI fix committed in single push`);
-        await ctx.reply(`✅ Fixed ${fileCount} file(s) and pushed to GitHub!`);
-      } catch (gitError) {
-        const errMsg = String(gitError.stdout || gitError.stderr || gitError.message || '');
-        if (errMsg.includes('nothing to commit') || errMsg.includes('up to date')) {
-          await ctx.reply('⚠️ No changes to commit — fixes may not have generated valid code. Check logs.');
-        } else {
-          await ctx.reply(`⚠️ Fixes generated but push failed: ${errMsg.substring(0, 200)}`);
+        newErrorCount = (postOutput.match(/error TS/g) || []).length;
+        console.log(`📊 Error count: before=${errorLines.length}, after=${newErrorCount}`);
+
+        if (newErrorCount >= errorLines.length) {
+          await ctx.reply(`🛑 Aborting commit — errors did not decrease (${errorLines.length} → ${newErrorCount}). Not pushing to avoid making things worse.`);
+          shouldCommit = false;
+        }
+      } catch (e) {
+        console.log(`⚠️ Pre-commit check failed: ${e.message}. Committing anyway.`);
+      }
+
+      // Single commit for all fixes — only if errors decreased
+      if (shouldCommit) {
+        try {
+          const githubToken = process.env.GITHUB_TOKEN;
+          execSync(`git -C "${appPath}" config user.email "agent@proximity.app"`, { stdio: 'pipe' });
+          execSync(`git -C "${appPath}" config user.name "AI Agent"`, { stdio: 'pipe' });
+          if (githubToken) {
+            execSync(`git -C "${appPath}" remote set-url origin https://${githubToken}@github.com/badometer-coder/proximity-app.git`, { stdio: 'pipe' });
+          }
+          execSync(`git -C "${appPath}" add -A`, { stdio: 'pipe' });
+          execSync(`git -C "${appPath}" commit -m "CI fix: resolve TypeScript errors (${fileCount} files)"`, { stdio: 'pipe' });
+          execSync(`git -C "${appPath}" push origin main`, { stdio: 'pipe' });
+          console.log(`✅ CI fix committed in single push`);
+          await ctx.reply(`✅ Fixed ${fileCount} file(s) and pushed! Errors: ${errorLines.length} → ${newErrorCount}`);
+        } catch (gitError) {
+          const errMsg = String(gitError.stdout || gitError.stderr || gitError.message || '');
+          if (errMsg.includes('nothing to commit') || errMsg.includes('up to date')) {
+            await ctx.reply('⚠️ No changes to commit — fixes may not have generated valid code.');
+          } else {
+            await ctx.reply(`⚠️ Push failed: ${errMsg.substring(0, 200)}`);
+          }
         }
       }
 
@@ -1692,21 +1724,56 @@ ${fileErrors}`;
       }
     }
 
-    // Single commit for all fixes
+    // Pre-commit verification: check if tsc errors actually decreased
+    let shouldCommit = true;
     try {
       const { execSync } = await import('child_process');
-      const githubToken = process.env.GITHUB_TOKEN;
-      execSync(`git -C "${appPath}" config user.email "agent@proximity.app"`, { stdio: 'pipe' });
-      execSync(`git -C "${appPath}" config user.name "AI Agent"`, { stdio: 'pipe' });
-      if (githubToken) {
-        execSync(`git -C "${appPath}" remote set-url origin https://${githubToken}@github.com/badometer-coder/proximity-app.git`, { stdio: 'pipe' });
+      let newErrorCount = 0;
+      try {
+        const output = execSync(`cd "${appPath}" && npx --yes tsc --noEmit --skipLibCheck 2>&1`, {
+          encoding: 'utf-8',
+          timeout: 120000,
+        });
+        newErrorCount = (output.match(/error TS/g) || []).length;
+      } catch (err) {
+        const output = String(err.stdout || err.stderr || '');
+        newErrorCount = (output.match(/error TS/g) || []).length;
       }
-      execSync(`git -C "${appPath}" add -A`, { stdio: 'pipe' });
-      execSync(`git -C "${appPath}" commit -m "CI fix: resolve TypeScript errors (${Object.keys(errorsByFile).length} files)"`, { stdio: 'pipe' });
-      execSync(`git -C "${appPath}" push origin main`, { stdio: 'pipe' });
-      console.log(`✅ CI fix committed in single push`);
-    } catch (gitError) {
-      console.log(`⚠️ CI fix commit failed: ${gitError.message.split('\n')[0]}`);
+
+      const originalErrorCount = errorLines.length;
+      console.log(`📊 Error count: before=${originalErrorCount}, after=${newErrorCount}`);
+
+      if (newErrorCount >= originalErrorCount) {
+        console.log(`🛑 Aborting commit — errors did not decrease (${originalErrorCount} → ${newErrorCount})`);
+        shouldCommit = false;
+        if (telegramBotContext) {
+          await telegramBotContext.telegram.sendMessage(
+            telegramBotContext.chat.id,
+            `🛑 Auto-fix aborted — errors went from ${originalErrorCount} to ${newErrorCount}. Not committing to avoid making things worse.`
+          ).catch(() => {});
+        }
+      }
+    } catch (e) {
+      console.log(`⚠️ Pre-commit check failed: ${e.message}. Committing anyway.`);
+    }
+
+    // Single commit for all fixes — only if errors decreased
+    if (shouldCommit) {
+      try {
+        const { execSync } = await import('child_process');
+        const githubToken = process.env.GITHUB_TOKEN;
+        execSync(`git -C "${appPath}" config user.email "agent@proximity.app"`, { stdio: 'pipe' });
+        execSync(`git -C "${appPath}" config user.name "AI Agent"`, { stdio: 'pipe' });
+        if (githubToken) {
+          execSync(`git -C "${appPath}" remote set-url origin https://${githubToken}@github.com/badometer-coder/proximity-app.git`, { stdio: 'pipe' });
+        }
+        execSync(`git -C "${appPath}" add -A`, { stdio: 'pipe' });
+        execSync(`git -C "${appPath}" commit -m "CI fix: resolve TypeScript errors (${Object.keys(errorsByFile).length} files)"`, { stdio: 'pipe' });
+        execSync(`git -C "${appPath}" push origin main`, { stdio: 'pipe' });
+        console.log(`✅ CI fix committed in single push`);
+      } catch (gitError) {
+        console.log(`⚠️ CI fix commit failed: ${gitError.message.split('\n')[0]}`);
+      }
     }
 
     ciFixAttempts = 0;
