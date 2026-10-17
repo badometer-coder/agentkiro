@@ -194,6 +194,9 @@ class MemoryManager {
     // Also save to database for long-term storage
     this.saveTaskToDatabase(record);
     this.saveSessionMemory();
+
+    // Auto-analyze patterns after each task (self-improvement)
+    this.analyzePatterns();
   }
 
   recordAgentDecision(agentName, decision, reasoning) {
@@ -248,6 +251,64 @@ class MemoryManager {
     this.saveLearnings();
 
     console.log(`📊 Patterns analyzed: ${successRate.toFixed(1)}% success rate`);
+  }
+
+  /**
+   * LEARNINGS - Get formatted string for LLM prompt
+   */
+
+  getLearningsForPrompt() {
+    const parts = [];
+
+    if (this.learnings.antiPatterns && this.learnings.antiPatterns.length > 0) {
+      parts.push('PAST MISTAKES TO AVOID (learned from previous failures):');
+      for (const ap of this.learnings.antiPatterns.slice(-5)) {
+        parts.push(`- ${ap.pattern}${ap.reason ? ` — ${ap.reason}` : ''}`);
+      }
+    }
+
+    if (this.learnings.bestPractices && this.learnings.bestPractices.length > 0) {
+      parts.push('\nPAST SUCCESSES (what worked before):');
+      for (const bp of this.learnings.bestPractices.slice(-5)) {
+        parts.push(`- ${bp.pattern} (provider: ${bp.provider || 'unknown'}, revisions: ${bp.revisions || 0})`);
+      }
+    }
+
+    return parts.length > 0 ? parts.join('\n') : '';
+  }
+
+  /**
+   * Record an anti-pattern (mistake to avoid in future)
+   */
+  recordAntiPattern(pattern, reason) {
+    if (!this.learnings.antiPatterns) this.learnings.antiPatterns = [];
+    // Avoid duplicates
+    const exists = this.learnings.antiPatterns.find(ap => ap.pattern === pattern);
+    if (!exists) {
+      this.learnings.antiPatterns.push({
+        pattern,
+        reason,
+        timestamp: new Date().toISOString(),
+      });
+      // Keep last 20
+      this.learnings.antiPatterns = this.learnings.antiPatterns.slice(-20);
+      this.saveLearnings();
+      console.log(`📝 Recorded anti-pattern: ${pattern}`);
+    }
+  }
+
+  /**
+   * Record a best practice (what worked)
+   */
+  recordBestPractice(pattern, provider = null) {
+    if (!this.learnings.bestPractices) this.learnings.bestPractices = [];
+    this.learnings.bestPractices.push({
+      pattern,
+      provider,
+      timestamp: new Date().toISOString(),
+    });
+    this.learnings.bestPractices = this.learnings.bestPractices.slice(-20);
+    this.saveLearnings();
   }
 
   /**

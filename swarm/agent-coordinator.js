@@ -520,6 +520,8 @@ IMPORT RULES — CRITICAL (violating these breaks the build):
 
 ${TYPE_DEFINITIONS_CONTEXT}
 
+${memory.getLearningsForPrompt()}
+
 ADDITIONAL PACKAGES AVAILABLE (these come with Expo even if not in package.json):
 - @expo/vector-icons (Ionicons, MaterialIcons, FontAwesome, etc.) — ALWAYS available in Expo projects
 - expo-constants, expo-device, expo-status-bar — always available
@@ -1348,13 +1350,21 @@ ${fileErrors}`;
         if (newErrorCount >= errorLines.length) {
           await ctx.reply(`🛑 Aborting commit — errors did not decrease (${errorLines.length} → ${newErrorCount}). Reverting changes.`);
           shouldCommit = false;
-          // Revert bad changes so repo stays clean
+          memory.recordAntiPattern(
+            'Manual fix attempt increased errors',
+            `Tried to fix ${errorLines.length} errors but ended with ${newErrorCount}.`
+          );
           try {
             execSync(`git -C "${appPath}" checkout -- .`, { stdio: 'pipe' });
             console.log(`↩️ Reverted bad changes — repo is clean`);
           } catch (e) {
             console.log(`⚠️ Could not revert: ${e.message}`);
           }
+        } else {
+          memory.recordBestPractice(
+            `Manual fix: reduced ${errorLines.length} → ${newErrorCount} errors`,
+            llmProvider.getCurrentProvider()?.name
+          );
         }
       } catch (e) {
         console.log(`⚠️ Pre-commit check failed: ${e.message}. Committing anyway.`);
@@ -1753,6 +1763,11 @@ ${fileErrors}`;
       if (newErrorCount >= originalErrorCount) {
         console.log(`🛑 Aborting commit — errors did not decrease (${originalErrorCount} → ${newErrorCount})`);
         shouldCommit = false;
+        // Record anti-pattern so agent learns from this failure
+        memory.recordAntiPattern(
+          'CI fix attempt increased errors',
+          `Tried to fix ${originalErrorCount} errors but ended with ${newErrorCount}. Agent likely introduced new errors (duplicate imports, wrong modules, or broke type definitions).`
+        );
         // Revert bad changes so next attempt starts from clean state
         try {
           execSync(`git -C "${appPath}" checkout -- .`, { stdio: 'pipe' });
@@ -1766,6 +1781,12 @@ ${fileErrors}`;
             `🛑 Auto-fix aborted — errors went from ${originalErrorCount} to ${newErrorCount}. Changes reverted. Will retry from clean state.`
           ).catch(() => {});
         }
+      } else {
+        // Record success as best practice
+        memory.recordBestPractice(
+          `CI fix: reduced ${originalErrorCount} → ${newErrorCount} errors`,
+          llmProvider.getCurrentProvider()?.name
+        );
       }
     } catch (e) {
       console.log(`⚠️ Pre-commit check failed: ${e.message}. Committing anyway.`);
