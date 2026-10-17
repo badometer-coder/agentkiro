@@ -719,7 +719,14 @@ OUTPUT: Modified file(s) only. Start each with "File: <path>" then the complete 
         break;
       }
 
-      // Re-extract and save fixed files
+      // Extract the list of files that actually have errors — only save these
+      const errorFiles = new Set();
+      for (const err of testResults.errors) {
+        const match = err.match(/([^(]+)\(\d+,\d+\)/);
+        if (match) errorFiles.add(match[1].trim().replace(/^Error:\s*/, ''));
+      }
+
+      // Re-extract and save fixed files — ONLY files that had errors
       let fixedFiles = [];
       const fixedFilePatterns = [
         /(?:^|\n)(?:File|file|FILE|filename|Filename):\s*([^\n]+)/g,
@@ -750,6 +757,19 @@ OUTPUT: Modified file(s) only. Start each with "File: <path>" then the complete 
 
         const code = codeBlock.trim();
         if (code.length < 10) continue;
+
+        // Only save files that actually had errors — don't touch healthy files
+        if (!errorFiles.has(cleanPath)) {
+          console.log(`🛡️ Skipping ${cleanPath} — not in error list, refusing to modify healthy file`);
+          continue;
+        }
+
+        // Reject truncated files — must end with } or ; or )
+        const lastChar = code[code.length - 1];
+        if (lastChar !== '}' && lastChar !== ';' && lastChar !== ')') {
+          console.log(`⚠️ Skipping ${cleanPath} — looks truncated (ends with: "${code.slice(-20)}")`);
+          continue;
+        }
 
         if (!validateSavedFile(cleanPath, code)) {
           console.log(`🛡️ Skipping fixed ${cleanPath} — failed protection check`);
