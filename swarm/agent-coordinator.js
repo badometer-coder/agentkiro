@@ -800,6 +800,7 @@ OUTPUT: Modified file(s) only. Start each with "File: <path>" then the complete 
     }
 
     // === AUTO-COMMIT TO GITHUB (only if tests passed) ===
+    let committed = false;
     if (savedFiles.length > 0 && testPassed && !noCommit) {
       const githubToken = process.env.GITHUB_TOKEN;
       try {
@@ -813,13 +814,18 @@ OUTPUT: Modified file(s) only. Start each with "File: <path>" then the complete 
         const commitMsg = `AI: ${taskDescription.substring(0, 60).replace(/"/g, "'")}`;
         execSync(`git -C "${appPath}" commit -m "${commitMsg}"`, { stdio: 'pipe' });
         execSync(`git -C "${appPath}" push origin main`, { stdio: 'pipe' });
+        committed = true;
         console.log(`✅ Committed and pushed ${savedFiles.length} file(s) to GitHub`);
       } catch (gitError) {
-        console.log(`⚠️ Git commit failed: ${gitError.message.split('\n')[0]}`);
+        const gitErrMsg = String(gitError.stdout || gitError.stderr || gitError.message || '').split('\n')[0];
+        console.log(`❌ Git commit FAILED: ${gitErrMsg}`);
+        if (ctx) await ctx.reply(`❌ Commit failed: ${gitErrMsg.substring(0, 100)}`).catch(() => {});
       }
     } else if (savedFiles.length > 0 && !testPassed) {
       console.log(`⚠️ Skipping commit — tests failed`);
       await notifyTaskStatus(ctx, taskDescription, 'failed', '❌ Code written but tests failed. Not committed.');
+    } else if (savedFiles.length > 0 && noCommit) {
+      console.log(`📝 Files saved (noCommit mode — commit handled by caller)`);
     }
 
     taskLog.push({
@@ -832,7 +838,8 @@ OUTPUT: Modified file(s) only. Start each with "File: <path>" then the complete 
     });
     
     if (savedFiles.length > 0) {
-      console.log(`✅ Task complete - saved ${savedFiles.length} file(s)${testPassed ? ' (tests passed)' : ''}`);
+      const status = committed ? 'committed & pushed' : (noCommit ? 'saved (noCommit)' : (testPassed ? 'saved (NOT committed)' : 'saved (tests failed)'));
+      console.log(`✅ Task complete - saved ${savedFiles.length} file(s) [${status}]`);
     } else {
       console.log(`✅ Task execution complete (no files saved)\n`);
     }
