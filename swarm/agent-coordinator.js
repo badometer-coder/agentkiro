@@ -277,6 +277,28 @@ function extractErrors(testOutput) {
 async function autoDebugErrors(taskDescription, errors, appPath, attemptNumber = 1) {
   try {
     console.log(`🔧 Auto-debugging (attempt ${attemptNumber})...`);
+
+    // Extract file paths from errors and read their content
+    const filesToFix = {};
+    for (const err of errors.slice(0, 10)) {
+      const match = err.match(/([^(]+)\(\d+,\d+\)/);
+      if (match) {
+        const file = match[1].trim().replace(/^Error:\s*/, '');
+        if (!filesToFix[file]) {
+          try {
+            filesToFix[file] = fs.readFileSync(path.join(appPath, file), 'utf-8');
+          } catch (e) {
+            filesToFix[file] = '(could not read file)';
+          }
+        }
+      }
+    }
+
+    // Build file contents string for the prompt
+    let fileContents = '';
+    for (const [file, content] of Object.entries(filesToFix)) {
+      fileContents += `\n\n=== ${file} ===\n${content}`;
+    }
     
     const debugMessages = [
       {
@@ -285,35 +307,40 @@ async function autoDebugErrors(taskDescription, errors, appPath, attemptNumber =
 
 You MUST fix the reported errors and provide COMPLETE, CORRECTED code.
 
+${TYPE_DEFINITIONS_CONTEXT}
+
 ERROR CONTEXT:
-${errors.slice(0, 5).join('\n')}
+${errors.slice(0, 10).join('\n')}
+
+FILES WITH ERRORS (fix ONLY these files — do NOT touch other files):
+${Object.keys(filesToFix).map(f => `- ${f}`).join('\n')}
 
 REQUIREMENTS:
-1. FIX all reported errors
-2. Keep the same file structure
-3. Provide COMPLETE code (all imports, all exports, all types)
-4. Include error handling
-5. Return ONLY corrected files with "File:" prefix
-
-DO NOT provide explanations or outlines - ONLY corrected code.`,
+1. FIX all reported errors in the files listed above
+2. Provide COMPLETE code for each file (all imports, all exports, all types)
+3. Start each file with "File: <path>" then the complete code
+4. Do NOT create or modify files that are not listed above
+5. Do NOT invent new imports — only use imports that already exist in the file
+6. NO markdown fences, NO explanations — ONLY corrected code.`,
       },
       {
         role: 'user',
         content: `TASK: ${taskDescription}
 
 REPORTED ERRORS:
-${errors.slice(0, 5).join('\n')}
+${errors.slice(0, 10).join('\n')}
 
-FIX these errors and provide the corrected files. Start with "File:" and include complete code.
+CURRENT FILE CONTENTS (fix these files):
 
-REQUIREMENTS CONTEXT:
-${APP_REQUIREMENTS}`,
+${fileContents}
+
+FIX these errors and provide the corrected files. Start with "File: <path>" and include complete code.`,
       },
     ];
 
     const fixedCode = await llmProvider.callLLM(debugMessages, {
-      temperature: 0.5,
-      max_tokens: 1000,
+      temperature: 0.3,
+      max_tokens: 4000,
       timeout: 5 * 60 * 1000,
     });
 
