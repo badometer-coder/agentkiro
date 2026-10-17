@@ -457,16 +457,27 @@ HOOK SIGNATURES (from hooks/) — EXACT return types:
 - useChatMessages(peerId, peerName) returns: { messages: ChatMessage[], isLoading: boolean, sendMessage: (text: string)=>Promise<void> }
   ↳ Use: const { messages, isLoading, sendMessage } = useChatMessages(peerId, peerName);
 
-UTILS EXPORTS (from utils/):
+UTILS EXPORTS (from src/lib/utils/index.ts):
 - formatDistance(meters: number): string
-- getSignalStrength(distance: number): SignalStrength
+- getSignalStrength(distanceMeters: number): SignalStrength  ← returns utils SignalStrength
 - getSignalBars(strength: SignalStrength): number
-- getPresenceStatus(lastActive: string): UserPresenceStatus
+- getPresenceStatus(lastActiveAt: string): UserPresenceStatus  ← returns utils UserPresenceStatus
 - getPresenceColor(status: UserPresenceStatus): string
 - formatRelativeTime(date: string): string
 - getInitials(name: string): string
 - formatTime(date: string): string
 ↳ NEVER invent functions like "calculateDistanceKm", "errorMsg", "refreshLocation"
+
+⚠️ CRITICAL — DUPLICATE TYPE CONFLICTS:
+SignalStrength is defined in TWO places with DIFFERENT values:
+  - src/types/index.ts:     'excellent' | 'good' | 'fair' | 'poor'
+  - src/lib/utils/index.ts: 'excellent' | 'good' | 'fair' | 'weak' | 'none'
+UserPresenceStatus is also defined in TWO places:
+  - src/types/index.ts:     'online' | 'away' | 'offline' | 'busy'
+  - src/lib/utils/index.ts: 'online' | 'recently' | 'offline'
+→ When fixing type errors, make FormattedNearbyPeer use the SAME SignalStrength/UserPresenceStatus as the utils functions.
+→ The utils types (with 'weak', 'none', 'recently') are the CORRECT ones — update src/types/index.ts to match.
+→ ChatMessage does NOT exist in src/types/index.ts — if ChatThreadScreen needs it, add it there or import from the correct location.
 
 EXPORTS (what actually exists):
 - App.tsx DOES NOT export openChat — handle chat navigation internally or via props
