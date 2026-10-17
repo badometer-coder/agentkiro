@@ -1858,7 +1858,6 @@ ${fileErrors}`;
         summaryMsg
       ).catch(() => {});
     }
-  }
 });
 
 // Graceful shutdown
