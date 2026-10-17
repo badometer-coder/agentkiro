@@ -251,7 +251,7 @@ async function runTests(appPath) {
 
     return { passed: realErrors.length === 0, output: '', errors: realErrors };
   } catch (error) {
-    console.log(`⚠️ Test runner unavailable — skipping`);
+    console.log(`⚠️ Test runner error: ${error.message?.split('\n')[0] || error.message || 'unknown'}`);
     return { passed: true, output: '', errors: [] };
   }
 }
