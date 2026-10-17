@@ -1,0 +1,121 @@
+═══════════════════════════════════════════════════════════════════════════════
+                         TEST LOCAL WEB SEARCH - COMMANDS
+═══════════════════════════════════════════════════════════════════════════════
+
+LOCATION OF PROJECT:
+  /Users/owner/Documents/projects/Agents/agentkiro
+
+═══════════════════════════════════════════════════════════════════════════════
+BASIC COMMANDS (Copy & Paste Each Line)
+═══════════════════════════════════════════════════════════════════════════════
+
+1. Navigate to project:
+   cd /Users/owner/Documents/projects/Agents/agentkiro
+
+2. Test web search module (10 seconds):
+   node test-web-search-local.js
+
+3. Test agent code generation (30-45 seconds):
+   node test-agent-execution-local.js
+
+4. Test full pipeline (30-45 seconds):
+   node test-full-flow.js
+
+═══════════════════════════════════════════════════════════════════════════════
+QUICK - RUN ALL 3 TESTS AT ONCE (1-2 minutes)
+═══════════════════════════════════════════════════════════════════════════════
+
+cd /Users/owner/Documents/projects/Agents/agentkiro && \
+echo "TEST 1: Web Search Module" && node test-web-search-local.js && \
+echo "" && echo "TEST 2: Agent Execution" && node test-agent-execution-local.js && \
+echo "" && echo "TEST 3: Full Pipeline" && node test-full-flow.js && \
+echo "" && echo "✅ ALL TESTS PASSED - Ready for deployment!"
+
+═══════════════════════════════════════════════════════════════════════════════
+WHAT TO EXPECT IN OUTPUT
+═══════════════════════════════════════════════════════════════════════════════
+
+✅ SUCCESS INDICATORS:
+
+From Test 1 (Web Search):
+  ✓ Result received
+  ✓ Result from cache (0ms)
+  ✓ Cached result matches
+  ✓ ALL TESTS PASSED
+
+From Test 2 (Agent):
+  ✓ No hallucinations detected
+  ✓ Real API usage: signOut, loading, user, session
+  ✓ Code appears complete
+
+From Test 3 (Full Pipeline):
+  ✓ Code is complete
+  ✓ Production Readiness: 100%
+  ✓ No issues detected
+
+═══════════════════════════════════════════════════════════════════════════════
+TROUBLESHOOTING
+═══════════════════════════════════════════════════════════════════════════════
+
+Test hangs or seems stuck?
+  → It's waiting for LLM API to respond
+  → This is normal, can take 30-45 seconds
+  → Or press Ctrl+C to cancel and try next test
+
+See "DuckDuckGo search failed"?
+  → This is EXPECTED - using fallback documentation
+  → Agent still gets correct API info
+  → Continue with test (not an error)
+
+See hallucination errors (refreshLocation, errorMsg)?
+  → Unexpected - means LLM provider issue
+  → Try running test again
+  → Check .env has valid API keys
+
+See "Cannot find module"?
+  → Dependencies not installed
+  → Run: npm install
+  → Then try test again
+
+═══════════════════════════════════════════════════════════════════════════════
+AFTER TESTS PASS
+═══════════════════════════════════════════════════════════════════════════════
+
+Deploy to Render:
+
+  cd /Users/owner/Documents/projects/Agents/agentkiro
+  git add -A
+  git commit -m "feat: web search integration - local tests passing"
+  git push origin main
+
+Then test in production (after deploy):
+  /search "test query"
+  /init
+  /execute
+
+═══════════════════════════════════════════════════════════════════════════════
+FILES BEING TESTED
+═══════════════════════════════════════════════════════════════════════════════
+
+swarm/web-search.js              ← Web search module
+swarm/agent-coordinator.js       ← Agent with web search integrated
+package.json                     ← Updated with node-fetch
+
+test-web-search-local.js         ← Test 1: Web search module
+test-agent-execution-local.js    ← Test 2: Agent execution
+test-full-flow.js                ← Test 3: Full pipeline
+
+═══════════════════════════════════════════════════════════════════════════════
+QUICK REFERENCE - COPY & PASTE
+═══════════════════════════════════════════════════════════════════════════════
+
+Just run this one command to test everything:
+
+cd /Users/owner/Documents/projects/Agents/agentkiro && npm install && \
+node test-web-search-local.js && \
+node test-agent-execution-local.js && \
+node test-full-flow.js
+
+(Add npm install to ensure dependencies are ready)
+
+═══════════════════════════════════════════════════════════════════════════════

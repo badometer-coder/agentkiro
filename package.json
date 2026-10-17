@@ -18,6 +18,7 @@
     "@supabase/supabase-js": "^2.117.3",
     "dotenv": "^16.4.5",
     "groq-sdk": "^0.7.0",
+    "node-fetch": "^2.6.11",
     "openai": "^4.104.0",
     "simple-git": "^3.20.0",
     "telegraf": "^4.15.0"

@@ -5,6 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import MultiLLMProvider from './multi-llm-provider.js';
 import MemoryManager from './memory-manager.js';
+import WebSearch from './web-search.js';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { startHealthServer, setCIErrorCallback } from './health-server.js';
@@ -300,6 +301,32 @@ async function autoDebugErrors(taskDescription, errors, appPath, attemptNumber =
     for (const [file, content] of Object.entries(filesToFix)) {
       fileContents += `\n\n=== ${file} ===\n${content}`;
     }
+
+    // === WEB SEARCH: Extract error codes and search for solutions ===
+    let webSearchContext = '';
+    const errorCodes = new Set();
+    for (const err of errors.slice(0, 5)) {
+      const match = err.match(/error\s+TS(\d+)/);
+      if (match) {
+        errorCodes.add(match[1]);
+      }
+    }
+
+    if (errorCodes.size > 0) {
+      console.log(`🔍 Searching for TypeScript error solutions: ${Array.from(errorCodes).join(', ')}`);
+      try {
+        const errorCode = Array.from(errorCodes)[0];
+        const errorMsg = errors[0].substring(0, 100);
+        const results = await WebSearch.searchErrorSolution(`TS${errorCode}`, errorMsg);
+        
+        if (results) {
+          webSearchContext = `\n\n=== ERROR SOLUTION DOCUMENTATION ===\n${results}\n===\n`;
+          console.log(`✅ Found solutions for error TS${errorCode}`);
+        }
+      } catch (searchError) {
+        console.log(`⚠️ Error search failed (continuing): ${searchError.message}`);
+      }
+    }
     
     const debugMessages = [
       {
@@ -309,6 +336,8 @@ async function autoDebugErrors(taskDescription, errors, appPath, attemptNumber =
 You MUST fix the reported errors and provide COMPLETE, CORRECTED code.
 
 ${TYPE_DEFINITIONS_CONTEXT}
+
+${webSearchContext}
 
 ERROR CONTEXT:
 ${errors.slice(0, 10).join('\n')}
@@ -523,6 +552,35 @@ async function executeTask(taskDescription, ctx = null, noCommit = false) {
     const appPath = process.env.PROJECT_PATH || '/opt/render/project/proximity-app';
     const currentFiles = await readProjectFiles(appPath, taskDescription);
     console.log(`📂 Read existing project files for context`);
+
+    // === WEB SEARCH: Extract API keywords from task and search for real documentation ===
+    let webSearchContext = '';
+    const searchKeywords = [
+      'useAuth', 'useCurrentLocation', 'useNearbyPeers', 'useChatMessages',
+      'SignalStrength', 'UserPresenceStatus', 'NearbyPeer',
+      'React Native', 'Expo', 'TypeScript', 'Supabase',
+    ];
+
+    // Extract relevant keywords from task
+    const taskLower = taskDescription.toLowerCase();
+    const relevantKeywords = searchKeywords.filter(k => taskLower.includes(k.toLowerCase()));
+
+    if (relevantKeywords.length > 0) {
+      console.log(`🔍 Searching web for API documentation on: ${relevantKeywords.slice(0, 3).join(', ')}`);
+      
+      try {
+        // Search for the first relevant keyword (usually the most important)
+        const searchQuery = `${relevantKeywords[0]} React Native TypeScript API documentation`;
+        const results = await WebSearch.search(searchQuery);
+        
+        if (results) {
+          webSearchContext = `\n=== REAL API DOCUMENTATION (from web search) ===\n${results}\n===\n`;
+          console.log(`✅ Web search completed, got ${results.length} chars of documentation`);
+        }
+      } catch (searchError) {
+        console.log(`⚠️ Web search failed (continuing without): ${searchError.message}`);
+      }
+    }
     
     const messages = [
       {
@@ -551,6 +609,8 @@ IMPORT RULES — CRITICAL (violating these breaks the build):
 ${TYPE_DEFINITIONS_CONTEXT}
 
 ${memory.getLearningsForPrompt()}
+
+${webSearchContext}
 
 ADDITIONAL PACKAGES AVAILABLE (these come with Expo even if not in package.json):
 - @expo/vector-icons (Ionicons, MaterialIcons, FontAwesome, etc.) — ALWAYS available in Expo projects
@@ -993,7 +1053,25 @@ bot.command('status', (ctx) => {
 });
 
 bot.command('help', (ctx) => {
-  ctx.reply(`🤖 COORDINATOR HELP\n\n/init - Generate plan\n/execute - Run next task (manual)\n/auto - Run ALL remaining tasks automatically\n/status - Check progress\n/keys - Show API keys in use\n/usage - Show token usage\n/help - This message`);
+  ctx.reply(`🤖 COORDINATOR HELP
+
+DEVELOPMENT:
+/init - Generate plan
+/execute - Run next task (manual)
+/auto - Run ALL remaining tasks automatically
+/status - Check progress
+
+MONITORING:
+/keys - Show API keys in use
+/usage - Show token usage
+
+WEB SEARCH (for fixing hallucinations):
+/search <query> - Search for API documentation
+/cache-stats - Show web search cache stats
+/cache-clear - Clear web search cache
+
+GENERAL:
+/help - This message`);
 });
 
 bot.command('keys', (ctx) => {
@@ -1025,6 +1103,45 @@ bot.command('usage', async (ctx) => {
     const totalTokensEstimate = taskLog.length * 2000; // Rough estimate
     ctx.reply(`📊 LOCAL STATS (Rough Estimate)\n\n✅ Tasks completed: ${taskLog.length}\n📈 Estimated tokens used: ~${totalTokensEstimate}\n\nFor accurate Groq usage:\n👉 Visit https://console.groq.com/account/billing`);
   }
+});
+
+// Web search commands
+bot.command('search', async (ctx) => {
+  const query = ctx.message.text.replace('/search ', '').trim();
+  
+  if (!query) {
+    ctx.reply('Usage: /search <query>\n\nExample: /search react-native geolocation API');
+    return;
+  }
+  
+  ctx.reply(`🔍 Searching web for: "${query}"\n⏳ Please wait...`);
+  
+  try {
+    const results = await WebSearch.search(query);
+    
+    if (results) {
+      const messages = results.match(/[\s\S]{1,4096}/g) || [results];
+      ctx.reply(`✅ Search results for "${query}":`).catch(() => {});
+      
+      for (const msg of messages) {
+        ctx.reply(msg).catch(() => {});
+      }
+    } else {
+      ctx.reply('❌ No results found');
+    }
+  } catch (error) {
+    ctx.reply(`❌ Search error: ${error.message}`);
+  }
+});
+
+bot.command('cache-stats', (ctx) => {
+  const stats = WebSearch.getCacheStats();
+  ctx.reply(`📊 WEB SEARCH CACHE STATS\n\nCached queries: ${stats.size}\n\n${stats.size > 0 ? `Entries:\n${stats.entries.slice(0, 10).join('\n')}${stats.entries.length > 10 ? `\n... and ${stats.entries.length - 10} more` : ''}` : 'Cache is empty'}`);
+});
+
+bot.command('cache-clear', (ctx) => {
+  WebSearch.clearCache();
+  ctx.reply('🧹 Web search cache cleared');
 });
 
 // Auto-execute all tasks
