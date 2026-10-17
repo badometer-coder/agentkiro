@@ -100,6 +100,7 @@ let taskQueue = [];
 let currentTask = null;
 let taskLog = [];
 let conversationHistory = []; // Remember last 10 messages
+let stopRequested = false; // Global stop flag — set by "stop" command
 
 async function createExecutionPlan(topic = null) {
   try {
@@ -687,6 +688,11 @@ OUTPUT: Modified file(s) only. Start each with "File: <path>" then the complete 
     const maxDebugAttempts = 3;
 
     while (!testPassed && debugAttempts < maxDebugAttempts) {
+      if (stopRequested) {
+        console.log('🛑 Stop requested — aborting debug loop');
+        await notifyTaskStatus(ctx, taskDescription, 'failed', '🛑 Stopped by user');
+        break;
+      }
       const testResults = await runTests(appPath);
       
       if (testResults.passed) {
@@ -1218,6 +1224,18 @@ bot.on('text', async (ctx) => {
     const msg = raw.toLowerCase();
     if (raw.startsWith('/')) return;
     console.log(`\n💬 User: "${raw}"`);
+
+    // --- STOP / ABORT ---
+    if (msg.match(/^(stop|abort|cancel|halt|kill|enough|just stop|stop it|stop now)/i)) {
+      stopRequested = true;
+      taskQueue = [];
+      return ctx.reply('🛑 STOPPED. All running tasks will abort. Send "go" or "fix the code" to start again.');
+    }
+
+    // Reset stop flag when starting new work
+    if (msg.match(/^(go|start|fix|please fix|run|execute|continue)/i)) {
+      stopRequested = false;
+    }
 
     // --- GREETINGS ---
     if (/^(hey|hi|hello|sup|yo|hiya|howdy)[\s!.?]*$/.test(msg)) {
