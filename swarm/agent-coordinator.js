@@ -1346,8 +1346,15 @@ ${fileErrors}`;
         console.log(`📊 Error count: before=${errorLines.length}, after=${newErrorCount}`);
 
         if (newErrorCount >= errorLines.length) {
-          await ctx.reply(`🛑 Aborting commit — errors did not decrease (${errorLines.length} → ${newErrorCount}). Not pushing to avoid making things worse.`);
+          await ctx.reply(`🛑 Aborting commit — errors did not decrease (${errorLines.length} → ${newErrorCount}). Reverting changes.`);
           shouldCommit = false;
+          // Revert bad changes so repo stays clean
+          try {
+            execSync(`git -C "${appPath}" checkout -- .`, { stdio: 'pipe' });
+            console.log(`↩️ Reverted bad changes — repo is clean`);
+          } catch (e) {
+            console.log(`⚠️ Could not revert: ${e.message}`);
+          }
         }
       } catch (e) {
         console.log(`⚠️ Pre-commit check failed: ${e.message}. Committing anyway.`);
@@ -1746,10 +1753,17 @@ ${fileErrors}`;
       if (newErrorCount >= originalErrorCount) {
         console.log(`🛑 Aborting commit — errors did not decrease (${originalErrorCount} → ${newErrorCount})`);
         shouldCommit = false;
+        // Revert bad changes so next attempt starts from clean state
+        try {
+          execSync(`git -C "${appPath}" checkout -- .`, { stdio: 'pipe' });
+          console.log(`↩️ Reverted bad changes — repo is clean for next attempt`);
+        } catch (e) {
+          console.log(`⚠️ Could not revert: ${e.message}`);
+        }
         if (telegramBotContext) {
           await telegramBotContext.telegram.sendMessage(
             telegramBotContext.chat.id,
-            `🛑 Auto-fix aborted — errors went from ${originalErrorCount} to ${newErrorCount}. Not committing to avoid making things worse.`
+            `🛑 Auto-fix aborted — errors went from ${originalErrorCount} to ${newErrorCount}. Changes reverted. Will retry from clean state.`
           ).catch(() => {});
         }
       }
