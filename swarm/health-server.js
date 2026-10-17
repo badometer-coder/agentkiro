@@ -23,12 +23,33 @@ const server = http.createServer((req, res) => {
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
       try {
-        const { error } = JSON.parse(body);
-        console.log(`🚨 CI Error received: ${error}`);
+        let error;
+        // Try parsing as JSON first
+        try {
+          const parsed = JSON.parse(body);
+          // Accept various field names: error, errors, message, output
+          error = parsed.error || parsed.errors || parsed.message || parsed.output || null;
+          // If it's an array, join it
+          if (Array.isArray(error)) error = error.join('\n');
+        } catch (e) {
+          // Not JSON — use raw body as the error message
+          error = body.trim() || null;
+        }
+
+        // Guard: skip if no error message
+        if (!error || typeof error !== 'string' || error.length === 0) {
+          console.log(`⚠️ CI webhook received but no error message in payload`);
+          res.writeHead(200);
+          res.end('ok - no error content');
+          return;
+        }
+
+        console.log(`🚨 CI Error received: ${error.substring(0, 100)}...`);
         if (ciErrorCallback) ciErrorCallback(error);
         res.writeHead(200);
         res.end('ok');
       } catch (e) {
+        console.error(`❌ CI webhook error: ${e.message}`);
         res.writeHead(400);
         res.end('bad request');
       }
