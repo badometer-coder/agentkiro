@@ -427,6 +427,53 @@ async function readProjectFiles(appPath, taskDescription = '') {
   return context;
 }
 
+// Type definitions and hook signatures — used in ALL task execution
+const TYPE_DEFINITIONS_CONTEXT = `
+=== REAL TYPE DEFINITIONS (MEMORIZE THESE - use EXACTLY these, never invent new properties) ===
+
+INTERFACES (from types/):
+interface NearbyPeer { id: string; username: string; full_name: string; age: number; avatar_url: string|null; is_ble_discoverable: boolean; distance_meters: number; last_active_at: string; }
+interface FormattedNearbyPeer extends NearbyPeer { formatted_distance: string; signal_strength: SignalStrength; presence_status: UserPresenceStatus; }
+interface ApiError { code: string; message: string; details?: Record<string, unknown>; }
+interface ChatMessage { id: string; sender_id: string; receiver_id: string; message: string; sent_at: string; read: boolean; }
+type SignalStrength = 'excellent'|'good'|'fair'|'weak'|'none';
+type UserPresenceStatus = 'online'|'recently'|'offline';
+
+COMPONENT PROPS (from components/):
+- Avatar: { uri: string|null, name: string, size?: number } — use "uri" NOT "url"
+- NearbyPeerCard: { peer: FormattedNearbyPeer, onPress: ()=>void } — NO "onWave"
+- EmptyState: { icon: any, title: string, description: string } — use "description" NOT "message"
+- RadiusSlider: { value: number, onValueChange: (val: number)=>void }
+- ProximityHeader: { lastUpdated: string|null }
+
+HOOK SIGNATURES (from hooks/) — EXACT return types:
+- useAuth() returns EXACTLY: { user: User|null, session: Session|null, loading: boolean, signIn, signUp, signOut }
+  ↳ NOTE: property name is "loading" NOT "isLoading"
+  ↳ Use: const { user, session, loading, signOut } = useAuth();
+- useNearbyPeers(location: GPSCoordinates|null) returns: { peers: FormattedNearbyPeer[], selectedRadius: number, isLoading: boolean, isRefreshing: boolean, error: ApiError|null, lastFetchedAt: string|null, setRadius: (r:number)=>void, refresh: ()=>Promise<void> }
+  ↳ Use: const { peers, selectedRadius, isLoading, error, setRadius, refresh } = useNearbyPeers(location);
+- useCurrentLocation() returns: { location: GPSCoordinates|null, isLoading: boolean, error: string|null, permissionStatus: string, requestPermission: ()=>Promise<boolean> }
+  ↳ Use: const { location, isLoading, error, requestPermission } = useCurrentLocation();
+- useChatMessages(peerId, peerName) returns: { messages: ChatMessage[], isLoading: boolean, sendMessage: (text: string)=>Promise<void> }
+  ↳ Use: const { messages, isLoading, sendMessage } = useChatMessages(peerId, peerName);
+
+UTILS EXPORTS (from utils/):
+- formatDistance(meters: number): string
+- getSignalStrength(distance: number): SignalStrength
+- getSignalBars(strength: SignalStrength): number
+- getPresenceStatus(lastActive: string): UserPresenceStatus
+- getPresenceColor(status: UserPresenceStatus): string
+- formatRelativeTime(date: string): string
+- getInitials(name: string): string
+- formatTime(date: string): string
+↳ NEVER invent functions like "calculateDistanceKm", "errorMsg", "refreshLocation"
+
+EXPORTS (what actually exists):
+- App.tsx DOES NOT export openChat — handle chat navigation internally or via props
+- HomeScreen.tsx EXPORTS as NAMED EXPORT: export const HomeScreen: React.FC = () => { }
+  ↳ Import in App.tsx as: import { HomeScreen } from './src/screens/main/HomeScreen'
+`;
+
 async function executeTask(taskDescription, ctx = null, noCommit = false) {
   try {
     const stats = llmProvider.getStats();
@@ -453,6 +500,8 @@ STRICT RULES - READ CAREFULLY:
 9. Only output ONE file per response.
 10. CRITICAL: Before outputting code, verify the requested feature IS actually present in your output. If the task says "add a sign out button", the output MUST contain a sign out button. If the task says "add dark mode", the output MUST contain dark mode logic. NEVER regenerate the existing file unchanged — that is a failure.
 11. If the task references a hook or function (e.g. useAuth, signOut), check the CURRENT PROJECT FILES section to confirm it exists before using it.
+
+${TYPE_DEFINITIONS_CONTEXT}
 
 ADDITIONAL PACKAGES AVAILABLE (these come with Expo even if not in package.json):
 - @expo/vector-icons (Ionicons, MaterialIcons, FontAwesome, etc.) — ALWAYS available in Expo projects
@@ -1308,31 +1357,8 @@ const MAX_CI_FIX_ATTEMPTS = 3;
 const seenCIErrors = new Set();
 
 setCIErrorCallback(async (errorMessage) => {
-  // Deduplicate — same CI run should only fire once (use run URL as key)
-  const errorKey = errorMessage.match(/runs\/(\d+)/)?.[1] || errorMessage.substring(0, 100);
-  if (seenCIErrors.has(errorKey)) {
-    console.log(`🔇 Duplicate CI error ignored: ${errorKey}`);
-    return;
-  }
-  seenCIErrors.add(errorKey);
-  // Clear after 30 min to allow re-triggering on new failures
-  setTimeout(() => seenCIErrors.delete(errorKey), 30 * 60 * 1000);
-
-  // Stop if too many consecutive fix attempts — prevent infinite loops
-  ciFixAttempts++;
-  if (ciFixAttempts > MAX_CI_FIX_ATTEMPTS) {
-    console.log(`🛑 CI auto-fix stopped after ${MAX_CI_FIX_ATTEMPTS} attempts. Manual intervention needed.`);
-    if (telegramBotContext) {
-      await telegramBotContext.telegram.sendMessage(
-        telegramBotContext.chat.id,
-        `🛑 CI auto-fix gave up after ${MAX_CI_FIX_ATTEMPTS} attempts. Too many errors — please review manually.\n\nLast errors:\n${errorMessage.substring(0, 400)}`
-      ).catch(() => {});
-    }
-    return;
-  }
-
-  console.log(`🚨 CI Error (attempt ${ciFixAttempts}/${MAX_CI_FIX_ATTEMPTS}): ${errorMessage}`);
-
+  console.log(`🚨 CI Error received — AUTO-FIX ENABLED (batch mode)`);
+  
   // Notify via Telegram
   if (telegramBotContext) {
     await telegramBotContext.telegram.sendMessage(
@@ -1358,36 +1384,27 @@ setCIErrorCallback(async (errorMessage) => {
       }
     }
 
-    const contextBlock = `
-REAL TYPE DEFINITIONS (use EXACTLY these — never invent new properties):
-interface NearbyPeer { id: string; username: string; full_name: string; age: number; avatar_url: string|null; is_ble_discoverable: boolean; distance_meters: number; last_active_at: string; }
-interface FormattedNearbyPeer extends NearbyPeer { formatted_distance: string; signal_strength: SignalStrength; presence_status: UserPresenceStatus; }
-interface ApiError { code: string; message: string; details?: Record<string, unknown>; }
-type SignalStrength = 'excellent'|'good'|'fair'|'weak'|'none';
-type UserPresenceStatus = 'online'|'recently'|'offline';
-interface ChatMessage { id: string; sender_id: string; receiver_id: string; message: string; sent_at: string; read: boolean; }
-
-REAL COMPONENT PROPS:
-- Avatar: { uri: string|null, name: string, size?: number } — use "uri" NOT "url"
-- NearbyPeerCard: { peer: FormattedNearbyPeer, onPress: ()=>void } — NO "onWave"
-- EmptyState: { icon: any, title: string, description: string } — use "description" NOT "message"
-- RadiusSlider: { value: number, onValueChange: (val: number)=>void }
-- ProximityHeader: { lastUpdated: string|null }
-
-REAL HOOK APIs:
-- useNearbyPeers(location: GPSCoordinates|null) returns: { peers: FormattedNearbyPeer[], selectedRadius: number, isLoading: boolean, isRefreshing: boolean, error: ApiError|null, lastFetchedAt: string|null, setRadius: (r:number)=>void, refresh: ()=>Promise<void> }
-- useCurrentLocation() returns: { location: GPSCoordinates|null, isLoading: boolean, error: string|null, permissionStatus: string, requestPermission: ()=>Promise<boolean> }
-- useAuth() returns: { user: User|null, session: Session|null, loading: boolean, signIn, signUp, signOut }
-- useChatMessages(peerId, peerName) returns: { messages: ChatMessage[], isLoading: boolean, sendMessage: (text: string)=>Promise<void> }
-
-REAL UTILS exports: formatDistance, getSignalStrength, getSignalBars, getPresenceStatus, getPresenceColor, formatRelativeTime, getInitials, formatTime — NO "calculateDistanceKm"`;
-
     // Fix each broken file separately but commit only once at the end
     const appPath = process.env.PROJECT_PATH || '/opt/render/project/proximity-app';
     for (const [file, errors] of Object.entries(errorsByFile)) {
       const fileErrors = errors.join('\n');
+      
+      // Read the actual file content so agent can see what's broken
+      let fileContent = '';
+      try {
+        fileContent = fs.readFileSync(path.join(appPath, file), 'utf-8');
+      } catch (err) {
+        console.warn(`⚠️ Could not read ${file}: ${err.message}`);
+      }
+
       const fixTask = `Fix ONLY the file "${file}" to resolve these TypeScript errors. Do NOT change any other files. Do NOT change logic — only fix type errors.
-${contextBlock}
+
+${TYPE_DEFINITIONS_CONTEXT}
+
+CURRENT FILE CONTENT (read carefully before fixing):
+\`\`\`
+${fileContent}
+\`\`\`
 
 ERRORS IN ${file}:
 ${fileErrors}`;
