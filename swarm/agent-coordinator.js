@@ -531,6 +531,10 @@ ARCHITECTURE RULES:
 - Individual screens should NOT contain navigation chrome — only their own content
 - If asked to add bottom navigation, modify App.tsx using @react-navigation/bottom-tabs
 
+PROTECTED FILES — modify only as last resort:
+- tsconfig.json, package.json, app.json, babel.config.js — do NOT modify these unless the TypeScript errors are directly caused by a misconfiguration in that file.
+- If you must modify a config file, change ONLY the specific setting causing the error. Do NOT rewrite the entire file.
+
 IF YOU CANNOT DO THE TASK: respond "INCOMPLETE: <reason>"`,
       },
       {
