@@ -1669,31 +1669,45 @@ setCIErrorCallback(async (errorMessage) => {
   }
 
   console.log(`🚨 CI Error (attempt ${ciFixAttempts}/${MAX_CI_FIX_ATTEMPTS})`);
-  
-  // Notify via Telegram
-  if (telegramBotContext) {
-    await telegramBotContext.telegram.sendMessage(
-      telegramBotContext.chat.id,
-      `🚨 GitHub CI failed! Auto-fixing...\n\n${errorMessage.substring(0, 300)}`
-    ).catch(() => {});
-  }
 
-  // Auto-fix: group errors by file and fix each file separately
+  // Parse errors before notifying so we can show a detailed breakdown
   const errorLines = errorMessage
     .split('\n')
     .filter(l => l.includes('error TS'));
 
-  if (errorLines.length > 0) {
-    // Group errors by file path
-    const errorsByFile = {};
-    for (const line of errorLines) {
-      const fileMatch = line.match(/^([^(]+)\(\d+,\d+\)/);
-      if (fileMatch) {
-        const file = fileMatch[1].trim();
-        if (!errorsByFile[file]) errorsByFile[file] = [];
-        errorsByFile[file].push(line);
-      }
+  // Group errors by file path
+  const errorsByFile = {};
+  for (const line of errorLines) {
+    const fileMatch = line.match(/([^(]+)\(\d+,\d+\)/);
+    if (fileMatch) {
+      const file = fileMatch[1].trim().replace(/^Error:\s*/, '');
+      if (!errorsByFile[file]) errorsByFile[file] = [];
+      errorsByFile[file].push(line);
     }
+  }
+
+  // Send detailed debugging notification to Telegram
+  if (telegramBotContext) {
+    let debugMsg = `🚨 CI FAILED (attempt ${ciFixAttempts}/${MAX_CI_FIX_ATTEMPTS})\n\n`;
+    debugMsg += `📋 ${errorLines.length} TypeScript error(s) in ${Object.keys(errorsByFile).length} file(s):\n\n`;
+
+    for (const [file, errors] of Object.entries(errorsByFile)) {
+      debugMsg += `📁 ${file}\n`;
+      for (const err of errors.slice(0, 3)) {
+        // Extract just the error code and message, not the full path
+        const shortErr = err.replace(/^Error:\s*/, '').substring(0, 120);
+        debugMsg += `  ❌ ${shortErr}\n`;
+      }
+      if (errors.length > 3) debugMsg += `  ...and ${errors.length - 3} more\n`;
+      debugMsg += `\n`;
+    }
+
+    debugMsg += `🔧 Starting auto-fix...`;
+    await telegramBotContext.telegram.sendMessage(
+      telegramBotContext.chat.id,
+      debugMsg
+    ).catch(() => {});
+  }
 
     // Fix each broken file separately but commit only once at the end
     const appPath = process.env.PROJECT_PATH || '/opt/render/project/proximity-app';
@@ -1738,10 +1752,25 @@ ERRORS IN ${file}:
 ${fileErrors}`;
 
       console.log(`🔧 Auto-fixing ${file}...`);
+      
+      // Notify which file is being fixed
+      if (telegramBotContext) {
+        await telegramBotContext.telegram.sendMessage(
+          telegramBotContext.chat.id,
+          `🔧 Fixing ${file}...\n   ${errors.length} error(s) to resolve`
+        ).catch(() => {});
+      }
+      
       try {
         await executeTask(fixTask, telegramBotContext, true); // noCommit=true
       } catch (err) {
         console.error(`❌ CI auto-fix failed for ${file}: ${err.message}`);
+        if (telegramBotContext) {
+          await telegramBotContext.telegram.sendMessage(
+            telegramBotContext.chat.id,
+            `❌ Failed to fix ${file}: ${err.message.substring(0, 100)}`
+          ).catch(() => {});
+        }
       }
     }
 
@@ -1817,9 +1846,14 @@ ${fileErrors}`;
 
     ciFixAttempts = 0;
     if (telegramBotContext) {
+      const fileCount = Object.keys(errorsByFile).length;
+      let summaryMsg = `✅ CI FIX COMPLETE\n\n`;
+      summaryMsg += `📁 Fixed: ${fileCount} file(s)\n`;
+      summaryMsg += `📊 Errors: ${errorLines.length} → ${shouldCommit ? 'committed & pushed' : 'aborted'}\n`;
+      summaryMsg += `⏳ Waiting for GitHub Actions to confirm...`;
       await telegramBotContext.telegram.sendMessage(
         telegramBotContext.chat.id,
-        `✅ CI auto-fix applied to ${Object.keys(errorsByFile).length} file(s). Waiting for CI to confirm.`
+        summaryMsg
       ).catch(() => {});
     }
   }
