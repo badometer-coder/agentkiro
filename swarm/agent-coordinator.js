@@ -5,7 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import MultiLLMProvider from './multi-llm-provider.js';
 import MemoryManager from './memory-manager.js';
-import WebSearch from './web-search.js';
+// import WebSearch from './web-search.js'; // TEMPORARILY DISABLED
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { startHealthServer, setCIErrorCallback } from './health-server.js';
@@ -304,29 +304,29 @@ async function autoDebugErrors(taskDescription, errors, appPath, attemptNumber =
 
     // === WEB SEARCH: Extract error codes and search for solutions ===
     let webSearchContext = '';
-    const errorCodes = new Set();
-    for (const err of errors.slice(0, 5)) {
-      const match = err.match(/error\s+TS(\d+)/);
-      if (match) {
-        errorCodes.add(match[1]);
-      }
-    }
+    // const errorCodes = new Set();
+    // for (const err of errors.slice(0, 5)) {
+    //   const match = err.match(/error\s+TS(\d+)/);
+    //   if (match) {
+    //     errorCodes.add(match[1]);
+    //   }
+    // }
 
-    if (errorCodes.size > 0) {
-      console.log(`🔍 Searching for TypeScript error solutions: ${Array.from(errorCodes).join(', ')}`);
-      try {
-        const errorCode = Array.from(errorCodes)[0];
-        const errorMsg = errors[0].substring(0, 100);
-        const results = await WebSearch.searchErrorSolution(`TS${errorCode}`, errorMsg);
-        
-        if (results) {
-          webSearchContext = `\n\n=== ERROR SOLUTION DOCUMENTATION ===\n${results}\n===\n`;
-          console.log(`✅ Found solutions for error TS${errorCode}`);
-        }
-      } catch (searchError) {
-        console.log(`⚠️ Error search failed (continuing): ${searchError.message}`);
-      }
-    }
+    // if (errorCodes.size > 0) {
+    //   console.log(`🔍 Searching for TypeScript error solutions: ${Array.from(errorCodes).join(', ')}`);
+    //   try {
+    //     const errorCode = Array.from(errorCodes)[0];
+    //     const errorMsg = errors[0].substring(0, 100);
+    //     const results = await WebSearch.searchErrorSolution(`TS${errorCode}`, errorMsg);
+    //     
+    //     if (results) {
+    //       webSearchContext = `\n\n=== ERROR SOLUTION DOCUMENTATION ===\n${results}\n===\n`;
+    //       console.log(`✅ Found solutions for error TS${errorCode}`);
+    //     }
+    //   } catch (searchError) {
+    //     console.log(`⚠️ Error search failed (continuing): ${searchError.message}`);
+    //   }
+    // }
     
     const debugMessages = [
       {
@@ -555,32 +555,32 @@ async function executeTask(taskDescription, ctx = null, noCommit = false) {
 
     // === WEB SEARCH: Extract API keywords from task and search for real documentation ===
     let webSearchContext = '';
-    const searchKeywords = [
-      'useAuth', 'useCurrentLocation', 'useNearbyPeers', 'useChatMessages',
-      'SignalStrength', 'UserPresenceStatus', 'NearbyPeer',
-      'React Native', 'Expo', 'TypeScript', 'Supabase',
-    ];
+    // const searchKeywords = [
+    //   'useAuth', 'useCurrentLocation', 'useNearbyPeers', 'useChatMessages',
+    //   'SignalStrength', 'UserPresenceStatus', 'NearbyPeer',
+    //   'React Native', 'Expo', 'TypeScript', 'Supabase',
+    // ];
 
     // Extract relevant keywords from task
-    const taskLower = taskDescription.toLowerCase();
-    const relevantKeywords = searchKeywords.filter(k => taskLower.includes(k.toLowerCase()));
+    // const taskLower = taskDescription.toLowerCase();
+    // const relevantKeywords = searchKeywords.filter(k => taskLower.includes(k.toLowerCase()));
 
-    if (relevantKeywords.length > 0) {
-      console.log(`🔍 Searching web for API documentation on: ${relevantKeywords.slice(0, 3).join(', ')}`);
-      
-      try {
-        // Search for the first relevant keyword (usually the most important)
-        const searchQuery = `${relevantKeywords[0]} React Native TypeScript API documentation`;
-        const results = await WebSearch.search(searchQuery);
-        
-        if (results) {
-          webSearchContext = `\n=== REAL API DOCUMENTATION (from web search) ===\n${results}\n===\n`;
-          console.log(`✅ Web search completed, got ${results.length} chars of documentation`);
-        }
-      } catch (searchError) {
-        console.log(`⚠️ Web search failed (continuing without): ${searchError.message}`);
-      }
-    }
+    // if (relevantKeywords.length > 0) {
+    //   console.log(`🔍 Searching web for API documentation on: ${relevantKeywords.slice(0, 3).join(', ')}`);
+    //   
+    //   try {
+    //     // Search for the first relevant keyword (usually the most important)
+    //     const searchQuery = `${relevantKeywords[0]} React Native TypeScript API documentation`;
+    //     const results = await WebSearch.search(searchQuery);
+    //     
+    //     if (results) {
+    //       webSearchContext = `\n=== REAL API DOCUMENTATION (from web search) ===\n${results}\n===\n`;
+    //       console.log(`✅ Web search completed, got ${results.length} chars of documentation`);
+    //     }
+    //   } catch (searchError) {
+    //     console.log(`⚠️ Web search failed (continuing without): ${searchError.message}`);
+    //   }
+    // }
     
     const messages = [
       {
