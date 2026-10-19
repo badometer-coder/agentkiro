@@ -137,7 +137,8 @@ export class AgentTools {
    */
   getTime() {
     const now = new Date();
-    return now.toLocaleTimeString();
+    const timeStr = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    return `${timeStr} UTC`;
   }
 
   /**
