@@ -135,17 +135,17 @@ export class AgentTools {
   /**
    * Get current time
    */
-  getTime() {
+  async getTime() {
     // Search web for current time
-    return this.webSearch.search('current time');
+    return await this.webSearch.search('current time');
   }
 
   /**
    * Get current date
    */
-  getDate() {
+  async getDate() {
     // Search web for current date
-    return this.webSearch.search('today date');
+    return await this.webSearch.search('today date');
   }
 
   /**
