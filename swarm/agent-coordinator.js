@@ -1620,8 +1620,10 @@ AVAILABLE TOOLS:
 - remember {"type": "pattern|solution|insight", "content": "..."} → Save learning
 
 RULES:
-- "what time is it?" → [TOOL: get_time {}]
-- "what day is it?" → [TOOL: get_date {}]
+- "what time is it?" → You MUST respond with ONLY: [TOOL: get_time {}]
+- "what day is it?" → You MUST respond with ONLY: [TOOL: get_date {}]
+- "what's today" / "today's date" → You MUST respond with ONLY: [TOOL: get_date {}]
+- DO NOT answer date/time from your own knowledge — it will be wrong. ALWAYS use the tool.
 - news/current events/recent demos → [TOOL: web_search {"query": "..."}]
 - coding tasks for Proximity app → [DOTASK: description]
 - NEVER say "I don't have access to real-time info" — either search or answer from knowledge
@@ -1633,6 +1635,9 @@ RULES:
 
     // Add to history
     conversationHistory.push({ role: 'assistant', content: llmReply });
+
+    // DEBUG: log what the LLM actually said (helps diagnose tool call issues)
+    console.log(`🤖 LLM raw reply: "${llmReply.substring(0, 200)}"`);
 
     // === EXECUTE TOOLS if LLM requested any ===
     let finalReply = llmReply;
