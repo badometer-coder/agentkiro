@@ -1605,6 +1605,13 @@ ${fileErrors}`;
         role: 'system',
         content: `You are DevBot, an autonomous AI agent running on a server. You have FULL access to the Proximity Social App codebase and can write files, run git commits, and push to GitHub automatically.
 
+🌐 CAPABILITIES:
+- ✅ Web search: I can search for real API documentation and solutions before generating code
+- ✅ Code generation: I write complete, deployable TypeScript/React Native code
+- ✅ Memory: I learn from past interactions and improve over time
+- ✅ Error fixing: I automatically fix TypeScript errors using web search for solutions
+- ✅ Version control: I commit and push to GitHub
+
 APP FILE STRUCTURE:
 - src/screens/auth/LoginScreen.tsx
 - src/screens/auth/ProfileSetupScreen.tsx
