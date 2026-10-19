@@ -1604,10 +1604,15 @@ ${fileErrors}`;
     conversationHistory.push({ role: 'user', content: raw });
     if (conversationHistory.length > 10) conversationHistory = conversationHistory.slice(-10);
 
+    // Inject current date into system prompt — Render blocks outbound fetch so tools can't get it externally
+    const serverDate = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
+
     const llmReply = await llmProvider.callLLM([
       {
         role: 'system',
         content: `You are Fag, a smart conversational AI assistant with web search capability.
+
+📅 SERVER DATE (UTC): ${serverDate}
 
 🔧 YOU HAVE TOOLS. Use this format when needed:
 [TOOL: tool_name {"param": "value"}]
@@ -1621,9 +1626,9 @@ AVAILABLE TOOLS:
 
 RULES:
 - "what time is it?" → You MUST respond with ONLY: [TOOL: get_time {}]
-- "what day is it?" → You MUST respond with ONLY: [TOOL: get_date {}]
-- "what's today" / "today's date" → You MUST respond with ONLY: [TOOL: get_date {}]
-- DO NOT answer date/time from your own knowledge — it will be wrong. ALWAYS use the tool.
+- "what day is it?" → Answer directly using the SERVER DATE above — do NOT call a tool
+- "what's today" / "today's date" → Answer directly using the SERVER DATE above
+- DO NOT say you lack access to real-time info — you have the date above
 - news/current events/recent demos → [TOOL: web_search {"query": "..."}]
 - coding tasks for Proximity app → [DOTASK: description]
 - NEVER say "I don't have access to real-time info" — either search or answer from knowledge
@@ -1665,20 +1670,24 @@ RULES:
       // IMPORTANT: include system prompt + original user question + tool results
       // so the LLM always has full context (same pattern as Hermes)
       if (toolResults) {
-        const hasUsefulResults = toolResults.trim().length > 30 && !toolResults.includes('No results found') && !toolResults.includes('Search failed');
-        const originalQuestion = raw; // the user's original message
+        const hasUsefulResults = toolResults.trim().length > 30
+          && !toolResults.includes('No results found')
+          && !toolResults.includes('Search failed')
+          && !toolResults.includes('fetch failed')
+          && !toolResults.includes('Could not fetch');
+        const originalQuestion = raw;
 
         const toolContext = [
           {
             role: 'system',
-            content: `You are Fag, a smart conversational AI assistant. Answer the user's question directly and concisely.`,
+            content: `You are Fag, a smart conversational AI assistant. Answer the user's question directly and concisely. Server date (UTC): ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' })}`,
           },
           { role: 'user', content: originalQuestion },
           {
             role: 'user',
             content: hasUsefulResults
               ? `[Tool results for "${originalQuestion}"]:${toolResults}\nAnswer the question above using these results.`
-              : `[Note: web search returned no useful results for "${originalQuestion}"]\nAnswer the question using your own knowledge. Be direct — don't say you lack real-time access.`
+              : `[Web search unavailable — network restricted on server]\nAnswer "${originalQuestion}" using your own training knowledge. Be direct and helpful.`
           }
         ];
         

@@ -133,51 +133,60 @@ export class AgentTools {
   }
 
   /**
-   * Get current time via web API (reliable) with web search fallback
+   * Get current time — uses server clock since Render blocks outbound fetch
    */
   async getTime() {
-    // Primary: dedicated time API — accurate regardless of server clock
-    const dt = await this.webSearch.fetchCurrentDateTime();
-    if (dt.ok) {
-      const date = new Date(dt.datetime);
-      const timeStr = date.toLocaleTimeString('en-US', {
-        hour: '2-digit', minute: '2-digit', second: '2-digit',
-        hour12: true, timeZone: dt.timezone || 'UTC'
-      });
-      return `Current time: ${timeStr} (${dt.timezone || 'UTC'}) — via ${dt.source}`;
-    }
-
-    // Fallback: web search
+    const now = new Date();
+    // Try external API first in case network is available
     try {
-      const result = await this.webSearch.search('what time is it right now');
-      if (result && result.trim().length > 10) return result;
-    } catch (e) { /* ignore */ }
+      const response = await fetch('https://worldtimeapi.org/api/ip', {
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(3000),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const dt = new Date(data.datetime);
+        const timeStr = dt.toLocaleTimeString('en-US', {
+          hour: '2-digit', minute: '2-digit', second: '2-digit',
+          hour12: true, timeZone: data.timezone || 'UTC'
+        });
+        return `Current time: ${timeStr} (${data.timezone || 'UTC'})`;
+      }
+    } catch (e) { /* network blocked — fall through */ }
 
-    return 'Could not fetch current time.';
+    // Fallback: server clock (may be off by timezone but day is usually correct)
+    const timeStr = now.toUTCString();
+    return `Current time (server UTC): ${timeStr}`;
   }
 
   /**
-   * Get current date via web API (reliable) with web search fallback
+   * Get current date — uses server clock since Render blocks outbound fetch
    */
   async getDate() {
-    // Primary: dedicated time API — accurate regardless of server clock
-    const dt = await this.webSearch.fetchCurrentDateTime();
-    if (dt.ok) {
-      const date = new Date(dt.datetime);
-      const dateStr = date.toLocaleDateString('en-US', {
-        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-        timeZone: dt.timezone || 'UTC'
-      });
-      return `Today is ${dateStr} (${dt.timezone || 'UTC'}) — via ${dt.source}`;
-    }
-
-    // Fallback: web search
+    const now = new Date();
+    // Try external API first in case network is available
     try {
-      const result = await this.webSearch.search('what is todays date');
-      if (result && result.trim().length > 10) return result;
-    } catch (e) { /* ignore */ }
+      const response = await fetch('https://worldtimeapi.org/api/ip', {
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(3000),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const dt = new Date(data.datetime);
+        const dateStr = dt.toLocaleDateString('en-US', {
+          weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+          timeZone: data.timezone || 'UTC'
+        });
+        return `Today is ${dateStr} (${data.timezone || 'UTC'})`;
+      }
+    } catch (e) { /* network blocked — fall through */ }
 
-    return 'Could not fetch current date.';
+    // Fallback: server clock
+    const dateStr = now.toLocaleDateString('en-US', {
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+      timeZone: 'UTC'
+    });
+    return `Today is ${dateStr} (UTC — server clock)`;
   }
 
   /**
