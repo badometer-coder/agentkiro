@@ -136,16 +136,20 @@ export class AgentTools {
    * Get current time
    */
   async getTime() {
-    // Search web for current time
-    return await this.webSearch.search('current time');
+    // Use server time — reliable, instant
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true, timeZone: 'UTC' });
+    return `Current time (UTC): ${timeStr}`;
   }
 
   /**
    * Get current date
    */
   async getDate() {
-    // Search web for current date
-    return await this.webSearch.search('today date');
+    // Use server time — reliable, instant
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
+    return `Today is ${dateStr} (UTC)`;
   }
 
   /**

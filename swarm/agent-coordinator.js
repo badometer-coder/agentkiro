@@ -1657,16 +1657,23 @@ RULES:
       }
       
       // Get final response with tool results
+      // IMPORTANT: include system prompt + original user question + tool results
+      // so the LLM always has full context (same pattern as Hermes)
       if (toolResults) {
-        const hasUsefulResults = toolResults.length > 50 && !toolResults.includes('No results found') && !toolResults.includes('Search failed');
+        const hasUsefulResults = toolResults.trim().length > 30 && !toolResults.includes('No results found') && !toolResults.includes('Search failed');
+        const originalQuestion = raw; // the user's original message
 
         const toolContext = [
-          ...conversationHistory.slice(-2),
+          {
+            role: 'system',
+            content: `You are Fag, a smart conversational AI assistant. Answer the user's question directly and concisely.`,
+          },
+          { role: 'user', content: originalQuestion },
           {
             role: 'user',
             content: hasUsefulResults
-              ? `Tool results:${toolResults}\n\nBased on these results, answer the user's question concisely.`
-              : `The web search returned no useful results. Answer the user's question directly using your own knowledge. Do NOT say you lack access to real-time info — just answer naturally.`
+              ? `[Tool results for "${originalQuestion}"]:${toolResults}\nAnswer the question above using these results.`
+              : `[Note: web search returned no useful results for "${originalQuestion}"]\nAnswer the question using your own knowledge. Be direct — don't say you lack real-time access.`
           }
         ];
         
@@ -1675,7 +1682,7 @@ RULES:
           conversationHistory.push({ role: 'assistant', content: finalReply });
         } catch (e) {
           console.log(`  Failed to get final response: ${e.message}`);
-          finalReply = `Tool results:\n${toolResults}`;
+          finalReply = hasUsefulResults ? `Here's what I found:\n${toolResults}` : `I couldn't find that online, but based on my knowledge: [answer unavailable]`;
         }
       }
     }
