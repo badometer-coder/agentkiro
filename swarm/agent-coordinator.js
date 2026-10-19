@@ -6,6 +6,7 @@ import fs from 'fs';
 import MultiLLMProvider from './multi-llm-provider.js';
 import MemoryManager from './memory-manager.js';
 import WebSearch from './web-search.js';
+import AgentTools from './agent-tools.js';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { startHealthServer, setCIErrorCallback } from './health-server.js';
@@ -29,8 +30,8 @@ function notifyRateLimit(message) {
 // Initialize multi-provider LLM with notification callback
 const llmProvider = new MultiLLMProvider(process.env, notifyRateLimit);
 
-// Initialize Memory Manager
-const memory = new MemoryManager(process.env);
+// Initialize Agent Tools
+const agentTools = new AgentTools(process.env);
 
 const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN, {
   handlerTimeout: 10 * 60 * 1000, // 10 minutes — tasks take time
@@ -1647,10 +1648,49 @@ RULES:
     // Add to history
     conversationHistory.push({ role: 'assistant', content: llmReply });
 
+    // === EXECUTE TOOLS if LLM requested any ===
+    let finalReply = llmReply;
+    const toolCalls = [...llmReply.matchAll(/\[TOOL:\s*(\w+)\s*({[^}]*})\]/g)];
+    
+    if (toolCalls.length > 0) {
+      console.log(`🔧 Executing ${toolCalls.length} tool(s)...`);
+      let toolResults = '';
+      
+      for (const match of toolCalls) {
+        try {
+          const toolName = match[1];
+          const params = JSON.parse(match[2]);
+          console.log(`  Tool: ${toolName}(${JSON.stringify(params)})`);
+          
+          const result = await agentTools.executeTool(toolName, params);
+          toolResults += `\n✓ ${toolName}: ${result}\n`;
+        } catch (e) {
+          console.log(`  Tool error: ${e.message}`);
+          toolResults += `\n✗ Error: ${e.message}\n`;
+        }
+      }
+      
+      // Get final response with tool results
+      if (toolResults) {
+        const toolContext = [
+          ...conversationHistory.slice(-2),
+          { role: 'user', content: `Tool execution results:${toolResults}\n\nBased on these results, respond to the user.` }
+        ];
+        
+        try {
+          finalReply = await llmProvider.callLLM(toolContext, { temperature: 0.3, max_tokens: 300 });
+          conversationHistory.push({ role: 'assistant', content: finalReply });
+        } catch (e) {
+          console.log(`  Failed to get final response: ${e.message}`);
+          finalReply = `Tool results:\n${toolResults}`;
+        }
+      }
+    }
+
     // Parse action tags
-    const cleanReply = llmReply.replace(/\[(DOTASK|DOPLAN|RUN):[^\]]*\]/g, '').trim();
+    const cleanReply = finalReply.replace(/\[(DOTASK|DOPLAN|RUN):[^\]]*\]/g, '').trim();
     // Support multiple [DOTASK:] tags for multi-file features
-    const taskMatches = [...llmReply.matchAll(/\[DOTASK:\s*([^\]]+)\]/g)].map(m => m[1].trim());
+    const taskMatches = [...finalReply.matchAll(/\[DOTASK:\s*([^\]]+)\]/g)].map(m => m[1].trim());
     const taskMatch = taskMatches.length > 0 ? { 1: taskMatches[0] } : null;
     let planMatch = llmReply.match(/\[DOPLAN:\s*([^\]]+)\]/);
     const runMatch2 = llmReply.match(/\[RUN:\s*(\d+)\]/);
