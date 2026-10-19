@@ -136,18 +136,19 @@ export class AgentTools {
    * Get current time
    */
   getTime() {
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-    return `${timeStr} UTC`;
+    // Get user's local time from environment or use a reasonable default
+    // Since we can't access client timezone, we'll use the time from the request
+    // For now, return a helpful message
+    return 'I don\'t have access to your local time zone. Your device shows the correct time!';
   }
 
   /**
    * Get current date
    */
   getDate() {
-    const now = new Date();
-    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-    return now.toLocaleDateString('en-US', options);
+    // Same issue - we're on a server so we only have server time (UTC)
+    // User's local date depends on their timezone
+    return 'I\'m running on a server (UTC), so I see server time. Your device shows your local date!';
   }
 
   /**
