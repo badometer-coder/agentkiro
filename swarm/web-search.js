@@ -6,8 +6,9 @@
 
 export class WebSearch {
   constructor() {
-    this.cache = new Map(); // Cache search results to avoid duplicate requests
-    this.maxCacheAge = 60 * 60 * 1000; // 1 hour cache TTL
+    this.cache = new Map();
+    this.maxCacheAge = 60 * 60 * 1000;
+    this.initialized = false;
   }
 
   /**
