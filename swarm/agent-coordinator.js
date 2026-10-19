@@ -30,8 +30,11 @@ function notifyRateLimit(message) {
 // Initialize multi-provider LLM with notification callback
 const llmProvider = new MultiLLMProvider(process.env, notifyRateLimit);
 
+// Initialize Memory Manager
+const memory = new MemoryManager(process.env);
+
 // Initialize Agent Tools
-const agentTools = new AgentTools(process.env);
+const agentTools = new AgentTools(process.env, memory);
 
 const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN, {
   handlerTimeout: 10 * 60 * 1000, // 10 minutes — tasks take time

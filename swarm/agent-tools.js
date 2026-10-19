@@ -7,17 +7,17 @@ import WebSearch from './web-search.js';
 import MemoryManager from './memory-manager.js';
 
 export class AgentTools {
-  constructor(env) {
+  constructor(env, memoryManager) {
     this.env = env;
-    this.memory = new MemoryManager(env);
+    this.memory = memoryManager;
     this.webSearch = WebSearch;
-    this.tools = this.defineTtools();
+    this.tools = this.defineTools();
   }
 
   /**
    * Define all available tools
    */
-  defineTtools() {
+  defineTools() {
     return {
       web_search: {
         description: 'Search the web for real documentation, API references, solutions, or current information',
