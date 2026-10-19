@@ -52,81 +52,116 @@ export class WebSearch {
 
   /**
    * Search using DuckDuckGo Instant Answer API (free, no auth)
+   * Falls back to HTML scraping if instant answer returns nothing useful
    */
   async _searchDuckDuckGo(query) {
     try {
-      // Use DuckDuckGo's instant answer API
-      const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1`;
+      // First try DuckDuckGo instant answer API
+      const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`;
       
       const response = await fetch(url, {
-        timeout: 5000,
         headers: {
           'User-Agent': 'Mozilla/5.0 (compatible; ProximityAgentBot/1.0)',
         },
       });
 
+      if (response.ok) {
+        const data = await response.json();
+        let results = '';
+
+        if (data.AbstractText) {
+          results += `📌 Summary:\n${data.AbstractText}\n\n`;
+        }
+        if (data.Answer) {
+          results += `✅ Answer: ${data.Answer}\n\n`;
+        }
+        if (data.Definition) {
+          results += `Definition: ${data.Definition}\n\n`;
+        }
+        if (data.RelatedTopics && data.RelatedTopics.length > 0) {
+          const topics = data.RelatedTopics
+            .filter(t => t.Text)
+            .slice(0, 4)
+            .map((t, i) => `${i + 1}. ${t.Text}`)
+            .join('\n');
+          if (topics) results += `Related:\n${topics}\n\n`;
+        }
+        if (data.Results && data.Results.length > 0) {
+          const res = data.Results
+            .filter(r => r.Text)
+            .slice(0, 3)
+            .map((r, i) => `${i + 1}. ${r.Text.substring(0, 150)}`)
+            .join('\n');
+          if (res) results += `Results:\n${res}\n`;
+        }
+
+        if (results.trim()) {
+          return results.trim();
+        }
+      }
+
+      // Fallback: try DuckDuckGo HTML search for news/current events
+      console.log(`⚠️ DDG instant answer empty, trying HTML search...`);
+      return await this._searchDuckDuckGoHTML(query);
+
+    } catch (error) {
+      console.error(`DuckDuckGo search failed: ${error.message}`);
+      return this._constructDocumentation(query);
+    }
+  }
+
+  /**
+   * DuckDuckGo HTML search — works for news and general queries
+   */
+  async _searchDuckDuckGoHTML(query) {
+    try {
+      const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html',
+        },
+      });
+
       if (!response.ok) {
-        console.log(`⚠️ DuckDuckGo returned ${response.status}, trying alternative approach`);
         return this._constructDocumentation(query);
       }
 
-      const data = await response.json();
-      
-      // Extract useful info from DuckDuckGo response
-      let results = '';
+      const html = await response.text();
 
-      // Add instant answer if available
-      if (data.AbstractText) {
-        results += `📌 Summary:\n${data.AbstractText}\n\n`;
+      // Extract result snippets using regex (no DOM parser needed)
+      const snippets = [];
+
+      // Match result titles and snippets
+      const titleMatches = html.matchAll(/class="result__title"[^>]*>.*?<a[^>]*>([^<]{5,200})<\/a>/gs);
+      const snippetMatches = html.matchAll(/class="result__snippet"[^>]*>([^<]{10,300})</gs);
+
+      const titles = [...titleMatches].map(m => m[1].trim().replace(/&amp;/g, '&').replace(/&#x27;/g, "'")).slice(0, 5);
+      const snips = [...snippetMatches].map(m => m[1].trim().replace(/&amp;/g, '&').replace(/&#x27;/g, "'")).slice(0, 5);
+
+      if (titles.length === 0 && snips.length === 0) {
+        return this._constructDocumentation(query);
       }
 
-      // Add related topics
-      if (data.RelatedTopics && data.RelatedTopics.length > 0) {
-        results += `Related topics:\n`;
-        data.RelatedTopics.slice(0, 5).forEach((topic, i) => {
-          if (topic.Text) {
-            results += `${i + 1}. ${topic.Text}\n`;
-          }
-        });
+      let results = `🔍 Web results for "${query}":\n\n`;
+      const count = Math.max(titles.length, snips.length);
+      for (let i = 0; i < Math.min(count, 4); i++) {
+        if (titles[i]) results += `📰 ${titles[i]}\n`;
+        if (snips[i]) results += `   ${snips[i]}\n`;
         results += '\n';
       }
 
-      // Add definition if available
-      if (data.Definition) {
-        results += `Definition: ${data.Definition}\n\n`;
-      }
-
-      // Add infobox if available
-      if (data.Infobox) {
-        results += `Info: ${JSON.stringify(data.Infobox).substring(0, 200)}\n\n`;
-      }
-
-      // Add source URLs if available
-      if (data.Results && data.Results.length > 0) {
-        results += `Results:\n`;
-        data.Results.slice(0, 3).forEach((result, i) => {
-          if (result.Text) {
-            results += `${i + 1}. ${result.Text.substring(0, 150)}\n`;
-          }
-        });
-      }
-
-      // If we got something, return it; otherwise provide fallback
-      if (results.trim()) {
-        return results.trim();
-      }
-
-      // Fallback: construct based on query keywords
-      return this._constructDocumentation(query);
+      return results.trim();
     } catch (error) {
-      console.error(`DuckDuckGo search failed: ${error.message}`);
-      // Return constructed documentation as fallback
+      console.error(`DDG HTML search failed: ${error.message}`);
       return this._constructDocumentation(query);
     }
   }
 
   /**
    * Construct documentation from query keywords (fallback when API fails)
+   * For dev queries: returns known patterns
+   * For general queries: returns empty so LLM uses its own knowledge
    */
   _constructDocumentation(query) {
     const q = query.toLowerCase();
@@ -218,15 +253,9 @@ TS2307 - Cannot find module
   → Run npm install`;
     }
 
-    // Generic response
-    return `📌 API Documentation Search Result
-Query: "${query}"
-
-Note: Full documentation not available locally.
-For comprehensive documentation, visit:
-- React Native: https://reactnative.dev/docs
-- Expo: https://docs.expo.dev
-- TypeScript: https://www.typescriptlang.org/docs/`;
+    // For general/news queries, return empty so the LLM uses its own knowledge
+    // Don't confuse the agent with dev docs when someone asks about Elon Musk or current events
+    return '';
   }
 
   /**

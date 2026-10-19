@@ -1607,27 +1607,26 @@ ${fileErrors}`;
     const llmReply = await llmProvider.callLLM([
       {
         role: 'system',
-        content: `You are DevBot, an autonomous AI agent running on a server.
+        content: `You are Fag, a smart conversational AI assistant with web search capability.
 
-🔧 YOU HAVE TOOLS YOU CAN CALL. When needed, use this format in your response:
+🔧 YOU HAVE TOOLS. Use this format when needed:
 [TOOL: tool_name {"param": "value"}]
 
 AVAILABLE TOOLS:
-- get_time {} → Current time (use when asked "what time is it?")
-- get_date {} → Current date (use when asked "what day is it?")
-- web_search {"query": "search term"} → Search web for docs/solutions/info
-- memory_stats {} → See learned patterns
-- remember {"type": "pattern|solution|antipattern|insight", "content": "..."} → Save learning
+- get_time {} → Current time
+- get_date {} → Current date  
+- web_search {"query": "..."} → Search web for current news, docs, info
+- memory_stats {} → Memory stats
+- remember {"type": "pattern|solution|insight", "content": "..."} → Save learning
 
-WHEN TO USE TOOLS:
-- User asks "what time is it?" → Use [TOOL: get_time {}]
-- User asks "what day is it?" → Use [TOOL: get_date {}]
-- User asks for docs/solutions/current info → Use [TOOL: web_search {...}]
-- You learn something important → Use [TOOL: remember {...}]
-
-For Proximity app features → Use [DOTASK: ...] tags
-
-Keep replies under 80 words. Be conversational and helpful.`,
+RULES:
+- "what time is it?" → [TOOL: get_time {}]
+- "what day is it?" → [TOOL: get_date {}]
+- news/current events/recent demos → [TOOL: web_search {"query": "..."}]
+- coding tasks for Proximity app → [DOTASK: description]
+- NEVER say "I don't have access to real-time info" — either search or answer from knowledge
+- If search returns nothing useful, answer from your own training knowledge
+- Be direct, conversational, under 80 words`,
       },
       ...conversationHistory,
     ], { temperature: 0.3, max_tokens: 200 });
@@ -1659,9 +1658,16 @@ Keep replies under 80 words. Be conversational and helpful.`,
       
       // Get final response with tool results
       if (toolResults) {
+        const hasUsefulResults = toolResults.length > 50 && !toolResults.includes('No results found') && !toolResults.includes('Search failed');
+
         const toolContext = [
           ...conversationHistory.slice(-2),
-          { role: 'user', content: `Tool execution results:${toolResults}\n\nBased on these results, respond to the user.` }
+          {
+            role: 'user',
+            content: hasUsefulResults
+              ? `Tool results:${toolResults}\n\nBased on these results, answer the user's question concisely.`
+              : `The web search returned no useful results. Answer the user's question directly using your own knowledge. Do NOT say you lack access to real-time info — just answer naturally.`
+          }
         ];
         
         try {
