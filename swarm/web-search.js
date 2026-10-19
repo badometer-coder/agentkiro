@@ -51,6 +51,38 @@ export class WebSearch {
   }
 
   /**
+   * Get current date/time from a reliable external API
+   * Used by get_date and get_time tools
+   */
+  async fetchCurrentDateTime() {
+    // Try worldtimeapi.org — free, no auth, returns accurate datetime with timezone
+    try {
+      const response = await fetch('https://worldtimeapi.org/api/ip', {
+        headers: { 'Accept': 'application/json' },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        return { ok: true, datetime: data.datetime, timezone: data.timezone, source: 'worldtimeapi.org' };
+      }
+    } catch (e) {
+      console.log(`worldtimeapi failed: ${e.message}`);
+    }
+
+    // Fallback: timeapi.io
+    try {
+      const response = await fetch('https://timeapi.io/api/Time/current/zone?timeZone=UTC');
+      if (response.ok) {
+        const data = await response.json();
+        return { ok: true, datetime: `${data.date}T${data.time}Z`, timezone: 'UTC', source: 'timeapi.io' };
+      }
+    } catch (e) {
+      console.log(`timeapi.io failed: ${e.message}`);
+    }
+
+    return { ok: false };
+  }
+
+  /**
    * Search using DuckDuckGo Instant Answer API (free, no auth)
    * Falls back to HTML scraping if instant answer returns nothing useful
    */

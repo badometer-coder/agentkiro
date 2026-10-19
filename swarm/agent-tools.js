@@ -133,23 +133,51 @@ export class AgentTools {
   }
 
   /**
-   * Get current time
+   * Get current time via web API (reliable) with web search fallback
    */
   async getTime() {
-    // Use server time — reliable, instant
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true, timeZone: 'UTC' });
-    return `Current time (UTC): ${timeStr}`;
+    // Primary: dedicated time API — accurate regardless of server clock
+    const dt = await this.webSearch.fetchCurrentDateTime();
+    if (dt.ok) {
+      const date = new Date(dt.datetime);
+      const timeStr = date.toLocaleTimeString('en-US', {
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hour12: true, timeZone: dt.timezone || 'UTC'
+      });
+      return `Current time: ${timeStr} (${dt.timezone || 'UTC'}) — via ${dt.source}`;
+    }
+
+    // Fallback: web search
+    try {
+      const result = await this.webSearch.search('what time is it right now');
+      if (result && result.trim().length > 10) return result;
+    } catch (e) { /* ignore */ }
+
+    return 'Could not fetch current time.';
   }
 
   /**
-   * Get current date
+   * Get current date via web API (reliable) with web search fallback
    */
   async getDate() {
-    // Use server time — reliable, instant
-    const now = new Date();
-    const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
-    return `Today is ${dateStr} (UTC)`;
+    // Primary: dedicated time API — accurate regardless of server clock
+    const dt = await this.webSearch.fetchCurrentDateTime();
+    if (dt.ok) {
+      const date = new Date(dt.datetime);
+      const dateStr = date.toLocaleDateString('en-US', {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+        timeZone: dt.timezone || 'UTC'
+      });
+      return `Today is ${dateStr} (${dt.timezone || 'UTC'}) — via ${dt.source}`;
+    }
+
+    // Fallback: web search
+    try {
+      const result = await this.webSearch.search('what is todays date');
+      if (result && result.trim().length > 10) return result;
+    } catch (e) { /* ignore */ }
+
+    return 'Could not fetch current date.';
   }
 
   /**
