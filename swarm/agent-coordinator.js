@@ -1836,8 +1836,8 @@ For conversational questions, answer directly without tools.${skillsContext}`;
     // Support multiple [DOTASK:] tags for multi-file features
     const taskMatches = [...finalReply.matchAll(/\[DOTASK:\s*([^\]]+)\]/g)].map(m => m[1].trim());
     const taskMatch = taskMatches.length > 0 ? { 1: taskMatches[0] } : null;
-    let planMatch = llmReply.match(/\[DOPLAN:\s*([^\]]+)\]/);
-    const runMatch2 = llmReply.match(/\[RUN:\s*(\d+)\]/);
+    let planMatch = finalReply.match(/\[DOPLAN:\s*([^\]]+)\]/);
+    const runMatch2 = finalReply.match(/\[RUN:\s*(\d+)\]/);
 
     // Safety: if user didn't say "plan" or "create tasks", don't create a plan - execute directly
     if (planMatch && !msg.includes('make a plan') && !msg.includes('create tasks') && !msg.includes('create a plan')) {
