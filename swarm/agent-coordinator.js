@@ -1792,7 +1792,7 @@ When you need several pieces of information that don't depend on each other, req
     // Native function calling loop — like Hermes
     const messages = [{ role: 'system', content: systemPrompt }, ...conversationHistory];
     let finalReply = '';
-    const MAX_ROUNDS = 10;
+    const MAX_ROUNDS = 20;
     let round = 0;
     let lastToolCallJson = '';
     let toolStuckCount = 0;
@@ -1809,13 +1809,13 @@ When you need several pieces of information that don't depend on each other, req
 
       console.log(`🔧 Round ${round + 1}: ${result.toolCalls.length} tool call(s)`);
 
-      // Check if agent is stuck (calling same tool with same params)
+      // Check if agent is stuck (calling same tool with same params AND the result failed)
       const toolCallJson = JSON.stringify(result.toolCalls.map(tc => ({ name: tc.name, args: tc.args })));
       if (toolCallJson === lastToolCallJson) {
         toolStuckCount++;
-        if (toolStuckCount >= 2) {
+        if (toolStuckCount >= 3) {
           console.log(`⚠️  Agent stuck in loop (same tool call ${toolStuckCount}x) — bailing out`);
-          finalReply = `⚠️ I got stuck trying to ${result.toolCalls[0].name}. The operation failed repeatedly. Please check the logs or try a different approach.`;
+          finalReply = `⚠️ I got stuck on ${result.toolCalls[0].name}("${result.toolCalls[0].args?.path || result.toolCalls[0].args?.query || ''}"). Try rephrasing your request or check if the file path is correct.`;
           break;
         }
       } else {
@@ -1837,11 +1837,13 @@ When you need several pieces of information that don't depend on each other, req
         if (tc.name === 'read_file' && tc.args?.path) {
           const cacheKey = `${tc.args.path}:${tc.args.start_line || 0}`;
           if (readFilesThisTurn.has(cacheKey)) {
-            console.log(`  ↩ read_file cache hit: ${tc.args.path} (already read this turn)`);
-            toolResult = readFilesThisTurn.get(cacheKey);
+            console.log(`  ↩ read_file cache hit: ${tc.args.path} — telling model to proceed`);
+            toolResult = `[Already read this turn] ${readFilesThisTurn.get(cacheKey)}`;
           } else {
             toolResult = await agentTools.executeTool(tc.name, tc.args);
-            readFilesThisTurn.set(cacheKey, toolResult);
+            if (!toolResult.startsWith('❌')) {
+              readFilesThisTurn.set(cacheKey, toolResult);
+            }
           }
         } else {
           toolResult = await agentTools.executeTool(tc.name, tc.args);
