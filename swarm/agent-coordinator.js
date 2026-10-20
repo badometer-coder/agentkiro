@@ -7,6 +7,8 @@ import MultiLLMProvider from './multi-llm-provider.js';
 import MemoryManager from './memory-manager.js';
 import WebSearch from './web-search.js';
 import AgentTools from './agent-tools.js';
+import SkillsManager from './skills-manager.js';
+import SelfImprovementEngine from './self-improvement-engine.js';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { startHealthServer, setCIErrorCallback } from './health-server.js';
@@ -35,6 +37,12 @@ const memory = new MemoryManager(process.env);
 
 // Initialize Agent Tools
 const agentTools = new AgentTools(process.env, memory);
+
+// Initialize Skills Manager
+const skillsManager = new SkillsManager();
+
+// Initialize Self-Improvement Engine (Hermes-style learning loop)
+const selfImprovementEngine = new SelfImprovementEngine();
 
 const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN, {
   handlerTimeout: 10 * 60 * 1000, // 10 minutes — tasks take time
@@ -1094,6 +1102,14 @@ DEVELOPMENT:
 /auto - Run ALL remaining tasks automatically
 /status - Check progress
 
+SKILLS:
+/skills - List all available skills
+/skill <name> - Show details of a specific skill
+
+LEARNING:
+/learning - View agent's learning stats and skills created
+/learn - Alias for /learning
+
 MONITORING:
 /keys - Show API keys in use
 /usage - Show token usage
@@ -1105,6 +1121,56 @@ WEB SEARCH (for fixing hallucinations):
 
 GENERAL:
 /help - This message`);
+});
+
+bot.command('skills', (ctx) => {
+  const categories = skillsManager.listAllSkills();
+  let msg = `📚 AVAILABLE SKILLS (${Object.values(categories).flat().length} total)\n\n`;
+  
+  Object.entries(categories).forEach(([cat, skills]) => {
+    msg += `\n**${cat.replace(/-/g, ' ').toUpperCase()}**\n`;
+    skills.forEach(s => {
+      msg += `• ${s.title} (\`${s.name}\`)\n`;
+    });
+  });
+  
+  msg += `\n_Use /skill <name> to see details_`;
+  ctx.reply(msg);
+});
+
+bot.command('skill', (ctx) => {
+  const skillName = ctx.message.text.split(' ').slice(1).join(' ');
+  
+  if (!skillName) {
+    ctx.reply('Usage: /skill <skill_name>\n\nExample: /skill systematic-debugging');
+    return;
+  }
+  
+  const skill = skillsManager.getSkill(skillName);
+  
+  if (!skill) {
+    ctx.reply(`❌ Skill not found: ${skillName}\n\nUse /skills to see all available skills.`);
+    return;
+  }
+  
+  let msg = `📖 SKILL: ${skill.title}\n\n`;
+  msg += `Category: ${skill.category}\n`;
+  msg += `Tokens: ${skill.tokens || 0}\n`;
+  msg += `Triggers: ${(skill.triggers || []).join(', ')}\n\n`;
+  msg += skill.content.substring(0, 2000); // Truncate for Telegram
+  msg += skill.content.length > 2000 ? '\n\n_... (truncated, see docs)_' : '';
+  
+  ctx.reply(msg);
+});
+
+bot.command('learning', (ctx) => {
+  const insights = selfImprovementEngine.getInsights();
+  ctx.reply(insights || '📚 No learning events yet. Keep using me and I\'ll learn!');
+});
+
+bot.command('learn', (ctx) => {
+  const insights = selfImprovementEngine.getInsights();
+  ctx.reply(insights || '📚 No learning events yet. Keep using me and I\'ll learn!');
 });
 
 bot.command('keys', (ctx) => {
@@ -1643,12 +1709,23 @@ ${fileErrors}`;
     const serverDate = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     const serverTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
+    // Load relevant skills based on user message
+    const skillsContext = skillsManager.loadSkillsForContext(raw);
+
     const llmReply = await llmProvider.callLLM([
       {
         role: 'system',
         content: `You are Fag, a smart conversational AI agent with coding, web search, and memory capabilities.
 
 📅 TODAY: ${serverDate} — ${serverTime}
+
+📱 PROJECT CONTEXT:
+- Proximity app GitHub repo: https://github.com/badometer-coder/proximity-app
+- Local path: /Users/owner/proximity-app-final
+- Stack: React Native + Expo + TypeScript + Supabase
+- EAS project: proximity-app-final (dani-prox account)
+- Auto-updates via EAS Update to "preview" channel on every push to main
+- CI webhook: https://agent-swarm-ceti.onrender.com/ci-error (notifies you on TypeScript errors)
 
 🔧 YOU HAVE TOOLS. Call them using this format in your response:
 [TOOL: tool_name {"param": "value"}]
@@ -1677,7 +1754,7 @@ RULES:
 - For coding tasks: ALWAYS read_file first, then patch. Never blindly rewrite.
 - Call ONE tool per response. Wait for the result before calling the next.
 - DO NOT say you lack access to anything — use your tools.
-- Be direct and conversational.`,
+- Be direct and conversational.${skillsContext}`,
       },
       ...conversationHistory,
     ], { temperature: 0.3, max_tokens: 500 });
@@ -1703,6 +1780,14 @@ RULES:
           const toolName = match[1];
           const params = JSON.parse(match[2]);
           console.log(`  Tool: ${toolName}(${JSON.stringify(params).substring(0, 100)})`);
+          
+          // 📝 Log tool call for self-improvement engine
+          selfImprovementEngine.logToolCall({
+            toolName,
+            input: params,
+            timestamp: Date.now(),
+          });
+          
           const result = await agentTools.executeTool(toolName, params);
           // Truncate long results (file contents can be huge)
           const trimmed = (result || '').length > 3000
@@ -1752,6 +1837,16 @@ Remember: [TOOL: tool_name {"param": "value"}] format for tool calls.`,
     conversationHistory.push({ role: 'assistant', content: finalReply });
     if (conversationHistory.length > 30) conversationHistory = conversationHistory.slice(-30);
     saveConversationHistory(); // persist to disk (survives restarts)
+
+    // 🧠 Self-Improvement: Evaluate if this task should become a reusable skill
+    // (Hermes-style learning loop: if 5+ tool calls, create a skill)
+    if (selfImprovementEngine.sessionLog.length > 0) {
+      await selfImprovementEngine.endTask(
+        raw.substring(0, 100),  // task description (user's message)
+        finalReply,              // result
+        true                     // success
+      );
+    }
 
     // Parse action tags
     const cleanReply = finalReply.replace(/\[(DOTASK|DOPLAN|RUN):[^\]]*\]/g, '').trim();
