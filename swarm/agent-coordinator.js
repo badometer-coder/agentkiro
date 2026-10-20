@@ -1754,7 +1754,8 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
 - Use read_file to check the codebase. NEVER use web_search to check the repo.
 - Use write_file or patch to implement. Always read_file first.
 - web_search ONLY for external docs, never repo content.
-- After read_file shows "[File has X lines. Use start_line=N to read more]" — call read_file again with that start_line. Never re-read from 0.${skillsContext}`;
+- After read_file shows "[File has X lines. Use start_line=N to read more]" — call read_file again with that start_line. Never re-read from 0.
+- NEVER duplicate imports. When adding imports to a file, check what's already imported and only add what's missing. If using write_file, include ALL existing imports exactly once.${skillsContext}`;
 
     // Tool schemas for native function calling
     // NOTE: The LLM should batch multiple read_file calls in a single round
@@ -2102,18 +2103,44 @@ const MAX_CI_FIX_ATTEMPTS = 3;
 const seenCIErrors = new Set();
 
 setCIErrorCallback(async (errorMessage) => {
-  // KILL SWITCH — all auto-fix disabled
-  console.log(`🚨 CI Error received — AUTO-FIX DISABLED (kill switch active)`);
+  const errorKey = errorMessage.substring(0, 100);
+  if (seenCIErrors.has(errorKey)) {
+    console.log(`🔄 CI Error already seen — skipping duplicate`);
+    return;
+  }
+  seenCIErrors.add(errorKey);
+  ciFixAttempts++;
+
+  if (ciFixAttempts > MAX_CI_FIX_ATTEMPTS) {
+    console.log(`⚠️ Max CI fix attempts (${MAX_CI_FIX_ATTEMPTS}) reached — notifying only`);
+    if (telegramBotContext) {
+      await telegramBotContext.telegram.sendMessage(
+        telegramBotContext.chat.id,
+        `🚨 CI failed again (attempt ${ciFixAttempts}). Manual review needed:\n\n${errorMessage.substring(0, 500)}`
+      ).catch(() => {});
+    }
+    return;
+  }
+
+  console.log(`🚨 CI Error received — auto-fixing (attempt ${ciFixAttempts}/${MAX_CI_FIX_ATTEMPTS})...`);
   if (telegramBotContext) {
     await telegramBotContext.telegram.sendMessage(
       telegramBotContext.chat.id,
-      `🚨 CI failed. Auto-fix is DISABLED. No action taken.`
+      `🚨 CI failed — fixing automatically...\n\n${errorMessage.substring(0, 300)}`
     ).catch(() => {});
   }
-  return; // Do nothing
-});
 
-// Old CI callback body removed — kill switch active
+  // Auto-fix: treat CI error as a task
+  const fixTask = `Fix these TypeScript/build errors from the CI pipeline:\n\n${errorMessage.substring(0, 1000)}`;
+  const fixResult = await executeTask(fixTask, telegramBotContext);
+  if (fixResult && telegramBotContext) {
+    await telegramBotContext.telegram.sendMessage(
+      telegramBotContext.chat.id,
+      `✅ CI auto-fix applied. Check GitHub Actions for the new build.`
+    ).catch(() => {});
+    ciFixAttempts = 0; // reset on success
+  }
+});
 
 // Graceful shutdown
 process.once('SIGINT', () => {
