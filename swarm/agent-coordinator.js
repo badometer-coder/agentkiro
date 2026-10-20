@@ -1712,12 +1712,15 @@ ${fileErrors}`;
 📅 TODAY: ${serverDate} — ${serverTime}
 
 📱 PROJECT: React Native + Expo + TypeScript + Supabase
-- GitHub: https://github.com/badometer-coder/proximity-app
+- GitHub repo: badometer-coder/proximity-app
 - Auto-deploys on every push to main branch
 
-You have tools to read and write files directly to GitHub.
-Use them to actually implement what the user asks.
-For conversational questions, answer directly without tools.${skillsContext}`;
+TOOL RULES — follow strictly:
+- Use read_file to check what's currently in the codebase. NEVER use web_search to check the repo.
+- Use write_file or patch to implement code changes. Always read the file first before patching.
+- Use web_search ONLY for external documentation (React Native APIs, npm packages, etc.) — never for repo content.
+- For questions like "have you done X?" or "is X implemented?" — use read_file on the relevant file to check, then answer based on what you see.
+- Do NOT answer implementation questions from memory alone — always verify with read_file first.${skillsContext}`;
 
     // Tool schemas for native function calling
     const toolSchemas = [
@@ -1793,9 +1796,11 @@ For conversational questions, answer directly without tools.${skillsContext}`;
       const toolCallJson = JSON.stringify(result.toolCalls.map(tc => ({ name: tc.name, args: tc.args })));
       if (toolCallJson === lastToolCallJson) {
         toolStuckCount++;
-        console.log(`⚠️  Agent stuck in loop (same tool call ${toolStuckCount}x) — bailing out`);
-        finalReply = `⚠️ I got stuck trying to ${result.toolCalls[0].name}. The operation failed repeatedly. Please check the logs or try a different approach.`;
-        break;
+        if (toolStuckCount >= 2) {
+          console.log(`⚠️  Agent stuck in loop (same tool call ${toolStuckCount}x) — bailing out`);
+          finalReply = `⚠️ I got stuck trying to ${result.toolCalls[0].name}. The operation failed repeatedly. Please check the logs or try a different approach.`;
+          break;
+        }
       } else {
         toolStuckCount = 0;
         lastToolCallJson = toolCallJson;
