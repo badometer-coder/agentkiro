@@ -15,7 +15,49 @@ export class AgentTools {
     this.memory = memoryManager;
     this.webSearch = WebSearch;
     this.projectPath = env.PROJECT_PATH || process.cwd();
+    this.repoUrl = `https://github.com/badometer-coder/proximity-app.git`;
     this.tools = this.defineTools();
+    // Auto-clone repo on startup if path doesn't exist
+    this.ensureRepo();
+  }
+
+  /**
+   * Clone repo if it doesn't exist on disk (needed on Render)
+   */
+  ensureRepo() {
+    if (fs.existsSync(this.projectPath)) return; // already there
+    try {
+      console.log(`📥 Cloning proximity-app to ${this.projectPath}...`);
+      const token = this.env.GITHUB_TOKEN;
+      const url = token
+        ? `https://${token}@github.com/badometer-coder/proximity-app.git`
+        : this.repoUrl;
+      fs.mkdirSync(path.dirname(this.projectPath), { recursive: true });
+      execSync(`git clone ${url} "${this.projectPath}"`, { stdio: 'pipe', timeout: 120000 });
+      console.log(`✅ Repo cloned to ${this.projectPath}`);
+    } catch (err) {
+      console.log(`⚠️ Could not clone repo: ${err.message}`);
+    }
+  }
+
+  /**
+   * Pull latest code before file operations
+   */
+  async pullLatest() {
+    try {
+      if (!fs.existsSync(this.projectPath)) {
+        this.ensureRepo();
+        return;
+      }
+      const token = this.env.GITHUB_TOKEN;
+      if (token) {
+        execSync(`git -C "${this.projectPath}" remote set-url origin https://${token}@github.com/badometer-coder/proximity-app.git`, { stdio: 'pipe' });
+      }
+      execSync(`git -C "${this.projectPath}" pull origin main`, { stdio: 'pipe', timeout: 30000 });
+      console.log(`✅ Pulled latest code`);
+    } catch (err) {
+      console.log(`⚠️ Could not pull latest: ${err.message}`);
+    }
   }
 
   defineTools() {
@@ -117,7 +159,11 @@ export class AgentTools {
     try {
       const fullPath = path.resolve(this.projectPath, filePath);
       if (!fs.existsSync(fullPath)) {
-        return `File not found: ${filePath}`;
+        // Try cloning first — may just not be on disk yet
+        this.ensureRepo();
+        if (!fs.existsSync(fullPath)) {
+          return `File not found: ${filePath} (repo path: ${this.projectPath})`;
+        }
       }
 
       const content = fs.readFileSync(fullPath, 'utf-8');
