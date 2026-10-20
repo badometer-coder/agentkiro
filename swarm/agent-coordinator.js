@@ -1723,10 +1723,13 @@ For conversational questions, answer directly without tools.${skillsContext}`;
     const toolSchemas = [
       {
         name: 'read_file',
-        description: 'Read a file from the GitHub repo to understand current code before editing.',
+        description: 'Read a file from the GitHub repo. Returns content with line numbers. For large files, use start_line to page through sections.',
         parameters: {
           type: 'object',
-          properties: { path: { type: 'string', description: 'File path e.g. "src/screens/main/HomeScreen.tsx"' } },
+          properties: {
+            path: { type: 'string', description: 'File path e.g. "src/screens/main/HomeScreen.tsx"' },
+            start_line: { type: 'number', description: 'Line to start reading from (0-indexed). Use to page through large files.' },
+          },
           required: ['path'],
         },
       },
@@ -1808,8 +1811,8 @@ For conversational questions, answer directly without tools.${skillsContext}`;
         selfImprovementEngine.logToolCall({ toolName: tc.name, input: tc.args, timestamp: Date.now() });
 
         const toolResult = await agentTools.executeTool(tc.name, tc.args);
-        const trimmed = (toolResult || '').length > 3000
-          ? (toolResult || '').substring(0, 3000) + '\n...(truncated)'
+        const trimmed = (toolResult || '').length > 12000
+          ? (toolResult || '').substring(0, 12000) + '\n...(truncated — file has more content)'
           : toolResult || '';
 
         console.log(`  [tool result] ${trimmed.substring(0, 200)}...`);

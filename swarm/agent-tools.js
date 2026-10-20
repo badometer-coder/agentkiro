@@ -46,12 +46,19 @@ export class AgentTools {
 
   // ── Tool implementations ───────────────────────────────────
 
-  async readFile(filePath) {
+  async readFile(filePath, startLine = 0, maxLines = 300) {
     if (!this.token) return '❌ GITHUB_TOKEN not set';
     try {
       const data    = await this.githubGet(filePath);
       const content = Buffer.from(data.content, 'base64').toString('utf-8');
-      return content.split('\n').map((l, i) => `${i + 1}|${l}`).join('\n');
+      const lines   = content.split('\n');
+      const total   = lines.length;
+      const slice   = lines.slice(startLine, startLine + maxLines);
+      const result  = slice.map((l, i) => `${startLine + i + 1}|${l}`).join('\n');
+      const footer  = (startLine + maxLines < total)
+        ? `\n\n[File has ${total} lines total. Use read_file with start_line=${startLine + maxLines} to read more.]`
+        : `\n\n[End of file — ${total} lines total]`;
+      return result + footer;
     } catch (err) {
       return `❌ read_file failed: ${err.message}`;
     }
@@ -132,8 +139,8 @@ export class AgentTools {
   defineTools() {
     return {
       read_file: {
-        description: 'Read a file from GitHub repo. Returns content with line numbers.',
-        execute: async (p) => this.readFile(p.path),
+        description: 'Read a file from GitHub repo. Returns content with line numbers. Use start_line to page through large files.',
+        execute: async (p) => this.readFile(p.path, p.start_line || 0, p.max_lines || 300),
       },
       write_file: {
         description: 'Write/create a file in GitHub repo. Auto-commits and pushes.',
