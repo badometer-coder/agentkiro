@@ -1450,11 +1450,12 @@ bot.on('text', async (ctx) => {
     console.log(`\n💬 User: "${raw}"`);
 
     // Show typing indicator immediately so user knows the agent is working
-    await ctx.sendChatAction('typing');
+    ctx.telegram.sendChatAction(ctx.chat.id, 'typing').catch(() => {});
     // Keep refreshing typing indicator every 4 seconds during long tasks
     typingInterval = setInterval(() => {
-      ctx.sendChatAction('typing').catch(() => {});
+      ctx.telegram.sendChatAction(ctx.chat.id, 'typing').catch(() => {});
     }, 4000);
+    console.log(`⌨️  Typing indicator started for chat ${ctx.chat.id}`);
 
     // --- STOP / ABORT ---
     if (msg.match(/^(stop|abort|cancel|halt|kill|enough|just stop|stop it|stop now)/i)) {
