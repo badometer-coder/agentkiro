@@ -13,11 +13,13 @@ export class WebSearch {
 
   /**
    * Select which backend to use based on available API keys
+   * Priority matches Hermes: keyed backends first, then keyless (Exa MCP), then DDG
    */
   _getBackend() {
     if (this.env.TAVILY_API_KEY) return 'tavily';
     if (this.env.BRAVE_SEARCH_API_KEY) return 'brave';
-    return 'duckduckgo'; // free fallback, may be rate-limited
+    if (this.env.PERPLEXITY_API_KEY) return 'perplexity';
+    return 'exa-keyless'; // free, no key — same endpoint Hermes uses
   }
 
   /**
@@ -40,11 +42,15 @@ export class WebSearch {
     try {
       if (backend === 'tavily') results = await this._searchTavily(query);
       else if (backend === 'brave') results = await this._searchBrave(query);
+      else if (backend === 'exa-keyless') results = await this._searchExaKeyless(query);
       else results = await this._searchDuckDuckGo(query);
     } catch (err) {
       console.error(`Search error [${backend}]: ${err.message}`);
-      // Try DuckDuckGo as emergency fallback
-      if (backend !== 'duckduckgo') {
+      // Fallback to Exa keyless, then DDG
+      if (backend !== 'exa-keyless') {
+        try { results = await this._searchExaKeyless(query); } catch (_) {}
+      }
+      if (!results) {
         try { results = await this._searchDuckDuckGo(query); } catch (_) {}
       }
     }
@@ -53,6 +59,157 @@ export class WebSearch {
       this.cache.set(cacheKey, { results, timestamp: Date.now() });
     }
     return results || '';
+  }
+
+  /**
+   * Exa keyless MCP search — FREE, no API key needed
+   * Same endpoint Hermes uses: https://mcp.exa.ai/mcp
+   */
+  async _searchExaKeyless(query, limit = 5) {
+    const payload = {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/call',
+      params: {
+        name: 'web_search_exa',
+        arguments: { query, numResults: Math.min(limit, 5) }
+      }
+    };
+
+    const response = await fetch('https://mcp.exa.ai/mcp', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/event-stream',
+        'User-Agent': 'hermes-agent',
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!response.ok) throw new Error(`Exa keyless ${response.status}`);
+
+    const text = await response.text();
+    
+    // Check for rate limit
+    if (text.includes('rateLimited') || text.includes('rate limit')) {
+      console.log('⚠️ Exa rate-limited, trying Parallel...');
+      return await this._searchParallelKeyless(query, limit);
+    }
+
+    return this._parseExaResponse(text, query);
+  }
+
+  /**
+   * Parallel keyless MCP search — FREE fallback when Exa rate-limits
+   * Same endpoint Hermes uses: https://search.parallel.ai/mcp
+   */
+  async _searchParallelKeyless(query, limit = 5) {
+    const sessionId = Math.random().toString(36).substring(2);
+    const payload = {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/call',
+      params: {
+        name: 'web_search',
+        arguments: { objective: query, search_queries: [query], session_id: sessionId }
+      }
+    };
+
+    const response = await fetch('https://search.parallel.ai/mcp', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/event-stream',
+        'User-Agent': 'hermes-agent',
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!response.ok) throw new Error(`Parallel keyless ${response.status}`);
+
+    const text = await response.text();
+    return this._parseParallelResponse(text, query);
+  }
+
+  /**
+   * Parse Parallel MCP response (JSON with results array)
+   */
+  _parseParallelResponse(text, query) {
+    let jsonStr = text;
+    if (text.startsWith('event:')) {
+      const dataLine = text.split('\n').find(l => l.startsWith('data: '));
+      if (dataLine) jsonStr = dataLine.substring(6);
+    }
+
+    try {
+      const data = JSON.parse(jsonStr);
+      const contentText = data?.result?.content?.[0]?.text || '';
+      const parsed = JSON.parse(contentText);
+      const results = (parsed.results || []).slice(0, 5).map((r, i) => ({
+        title: r.title || 'Result',
+        url: r.url || '',
+        description: (r.excerpts || []).join(' ').substring(0, 300),
+      }));
+
+      if (results.length === 0) return '';
+      return this._formatResults(results);
+    } catch (e) {
+      console.error('Parallel parse error:', e.message);
+      return '';
+    }
+  }
+
+  /**
+   * Parse Exa MCP response (SSE format: "event: message\ndata: {...}")
+   * Content is in result.content[0].text as Title:/URL:/Highlights: blocks
+   */
+  _parseExaResponse(text, query) {
+    // Extract JSON from SSE data line
+    let jsonStr = text;
+    if (text.startsWith('event:')) {
+      const dataLine = text.split('\n').find(l => l.startsWith('data: '));
+      if (dataLine) jsonStr = dataLine.substring(6);
+    }
+
+    try {
+      const data = JSON.parse(jsonStr);
+      const contentText = data?.result?.content?.[0]?.text || '';
+      if (!contentText) return '';
+
+      // Parse Title:/URL:/Highlights: blocks separated by ---
+      const results = [];
+      const blocks = contentText.split('\n---\n');
+
+      for (const block of blocks) {
+        let title = '', url = '', highlights = [];
+        let inHighlights = false;
+
+        for (const line of block.split('\n')) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith('Title:')) { title = trimmed.substring(6).trim(); inHighlights = false; }
+          else if (trimmed.startsWith('URL:')) { url = trimmed.substring(4).trim(); inHighlights = false; }
+          else if (trimmed.startsWith('Highlights:')) { inHighlights = true; }
+          else if (trimmed.startsWith('Published:') || trimmed.startsWith('Author:')) { inHighlights = false; }
+          else if (inHighlights && trimmed) { highlights.push(trimmed); }
+        }
+
+        if (url || title) {
+          results.push({
+            title: title || 'Result',
+            url: url || '',
+            description: highlights.join(' ').substring(0, 300),
+          });
+        }
+      }
+
+      if (results.length === 0) return '';
+      return this._formatResults(results);
+    } catch (e) {
+      console.error('Exa parse error:', e.message);
+      return '';
+    }
   }
 
   /**

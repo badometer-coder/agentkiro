@@ -129,13 +129,18 @@ class MultiLLMProvider {
           try {
             const systemPrompt = messages[0]?.role === 'system' ? messages[0]?.content : '';
             const userMessages = messages.filter((m) => m.role !== 'system');
-            const userMessage = userMessages[userMessages.length - 1]?.content || 'Process the request';
 
-            // Gemini requires systemInstruction as { parts: [{ text }] }, NOT a plain string
+            // Convert full conversation to Gemini's contents format
+            // This preserves multi-turn context (the bug was: only last message was sent)
+            const contents = userMessages.map(m => ({
+              role: m.role === 'assistant' ? 'model' : 'user',
+              parts: [{ text: m.content }],
+            }));
+
             const modelConfig = {
               model: 'gemini-3.5-flash-lite',
               generationConfig: {
-                maxOutputTokens: 8192,  // Always use high limit for Gemini regardless of options
+                maxOutputTokens: 8192,
                 temperature: options.temperature || 0.3,
               },
             };
@@ -146,7 +151,7 @@ class MultiLLMProvider {
             }
 
             const model = provider.client.getGenerativeModel(modelConfig);
-            const result = await model.generateContent(userMessage);
+            const result = await model.generateContent({ contents });
             const content = result.response.text();
             console.log(`✅ ${provider.name} succeeded`);
             return content;

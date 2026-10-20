@@ -1604,6 +1604,12 @@ ${fileErrors}`;
     conversationHistory.push({ role: 'user', content: raw });
     if (conversationHistory.length > 30) conversationHistory = conversationHistory.slice(-30);
 
+    // DEBUG: show what's in history so we can see if memory is working
+    console.log(`📜 History (${conversationHistory.length} entries):`);
+    conversationHistory.slice(-6).forEach((m, i) => {
+      console.log(`  [${i}] ${m.role}: ${m.content.substring(0, 80)}...`);
+    });
+
     // Inject current date into system prompt — use local server timezone, not UTC
     const serverDate = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     const serverTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
@@ -1645,7 +1651,7 @@ RULES:
 - Be direct and conversational.`,
       },
       ...conversationHistory,
-    ], { temperature: 0.3, max_tokens: 200 });
+    ], { temperature: 0.3, max_tokens: 500 });
 
     console.log(`🤖 LLM raw reply: "${llmReply.substring(0, 200)}"`);
 
@@ -1698,7 +1704,7 @@ Remember: [TOOL: tool_name {"param": "value"}] format for tool calls.`,
       ];
 
       try {
-        finalReply = await llmProvider.callLLM(toolContext, { temperature: 0.3, max_tokens: 400 });
+        finalReply = await llmProvider.callLLM(toolContext, { temperature: 0.3, max_tokens: 1000 });
         console.log(`🤖 Round ${round + 1} reply: "${finalReply.substring(0, 200)}"`);
       } catch (e) {
         console.log(`  LLM call failed: ${e.message}`);
