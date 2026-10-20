@@ -1508,7 +1508,8 @@ bot.on('text', async (ctx) => {
     }
 
     // --- "FIX THE CODE" / "FIX ERRORS" ---
-    if (msg.match(/^(fix|resolve|solve|check).*(code|error|problem|bug|issue|app|typescript|compilation)/i) || 
+    if (msg.match(/^(fix|resolve|solve).*(code|error|problem|bug|issue|typescript|compilation)/i) || 
+        msg.match(/^(check|find).*(error|bug|typescript|compilation|broken)/i) ||
         msg.match(/^please fix/i)) {
       await ctx.reply('🔍 Checking for errors...');
       
