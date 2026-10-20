@@ -1736,7 +1736,9 @@ When you need several pieces of information that don't depend on each other, req
 # Tool rules
 - Use read_file to check the codebase. NEVER use web_search to check the repo.
 - Use write_file or patch to implement changes. Always read_file first before patching.
-- Use web_search ONLY for external docs (React Native APIs, npm packages) — never for repo content.${skillsContext}`;
+- Use web_search ONLY for external docs (React Native APIs, npm packages) — never for repo content.
+- When read_file says "[File has X lines total. Use read_file with start_line=N to read more]" — you MUST call read_file again with that start_line to get the rest. Never re-read from line 0 when you already have line 0.
+- For large files: read in chunks (0, 300, 600...) until you find what you need, then write_file or patch.${skillsContext}`;
 
     // Tool schemas for native function calling
     const toolSchemas = [
