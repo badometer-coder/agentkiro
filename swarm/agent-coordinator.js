@@ -1849,6 +1849,12 @@ When you need several pieces of information that don't depend on each other, req
           }
         } else {
           toolResult = await agentTools.executeTool(tc.name, tc.args);
+          // Invalidate cache for any file that was just written/patched
+          if ((tc.name === 'write_file' || tc.name === 'patch') && tc.args?.path) {
+            for (const key of readFilesThisTurn.keys()) {
+              if (key.startsWith(tc.args.path + ':')) readFilesThisTurn.delete(key);
+            }
+          }
         }
         const trimmed = (toolResult || '').length > 12000
           ? (toolResult || '').substring(0, 12000) + '\n...(truncated — file has more content)'
@@ -1864,8 +1870,19 @@ When you need several pieces of information that don't depend on each other, req
         });
       }
 
+      // Trim old tool results to stay under token limits (keep system + last 6 messages)
+      // Groq free tier: 7000 tokens/min — large file reads blow this fast
+      const systemMsg = messages[0];
+      const tail = messages.slice(1);
+      if (tail.length > 12) {
+        // Keep only the last 12 messages (6 assistant+tool pairs), drop older tool results
+        const trimmedTail = tail.slice(-12);
+        messages.length = 0;
+        messages.push(systemMsg, ...trimmedTail);
+        console.log(`  ✂️  Trimmed message history to ${messages.length} messages to stay under token limit`);
+      }
+
       round++;
-    }
 
     if (!finalReply) finalReply = 'Done.';
 
