@@ -1715,12 +1715,17 @@ ${fileErrors}`;
 - GitHub repo: badometer-coder/proximity-app
 - Auto-deploys on every push to main branch
 
-TOOL RULES — follow strictly:
-- Use read_file to check what's currently in the codebase. NEVER use web_search to check the repo.
-- Use write_file or patch to implement code changes. Always read the file first before patching.
-- Use web_search ONLY for external documentation (React Native APIs, npm packages, etc.) — never for repo content.
-- For questions like "have you done X?" or "is X implemented?" — use read_file on the relevant file to check, then answer based on what you see.
-- Do NOT answer implementation questions from memory alone — always verify with read_file first.${skillsContext}`;
+WHEN TO USE TOOLS vs WHEN TO JUST REPLY:
+- Short or vague messages ("?", "ok", "what?", "hello", "done?") → reply directly, NO tools.
+- Status questions ("did you finish X?", "is X done?") → reply from conversation history, NO tools unless you truly have no record.
+- Coding tasks ("add X", "fix Y", "implement Z") → use read_file first, then write_file or patch.
+- Verification questions ("is X implemented?", "have you done X?") → use read_file on the relevant file, then answer.
+
+TOOL RULES:
+- Use read_file to check the codebase. NEVER use web_search to check the repo.
+- Use write_file or patch to implement changes. Always read_file first before patching.
+- Use web_search ONLY for external docs (React Native APIs, npm packages) — never for repo content.
+- Do NOT read files just to orient yourself on vague messages. Ask for clarification instead.${skillsContext}`;
 
     // Tool schemas for native function calling
     const toolSchemas = [
