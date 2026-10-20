@@ -1442,6 +1442,7 @@ async function getLatestGitHubErrors() {
 
 // Handle all natural language messages
 bot.on('text', async (ctx) => {
+  let typingInterval = null;
   try {
     const raw = ctx.message.text.trim();
     const msg = raw.toLowerCase();
@@ -1451,7 +1452,7 @@ bot.on('text', async (ctx) => {
     // Show typing indicator immediately so user knows the agent is working
     await ctx.sendChatAction('typing');
     // Keep refreshing typing indicator every 4 seconds during long tasks
-    const typingInterval = setInterval(() => {
+    typingInterval = setInterval(() => {
       ctx.sendChatAction('typing').catch(() => {});
     }, 4000);
 
