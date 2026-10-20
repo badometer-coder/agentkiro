@@ -1,11 +1,11 @@
-import Groq from 'groq-sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import OpenAI from 'openai';
+import Groq from 'groq-sdk';
 
 /**
- * Multi-Provider LLM Rotation
- * Supports: Groq, Google Gemini, OpenAI
- * Auto-rotates on rate limits or errors
+ * Multi-Provider LLM with Native Function Calling
+ * Uses the model's built-in tool_calls API — same as Hermes.
+ * No more [TOOL: ...] text parsing — models call tools reliably this way.
  */
 
 class MultiLLMProvider {
@@ -13,53 +13,30 @@ class MultiLLMProvider {
     this.env = env;
     this.providers = [];
     this.currentProviderIndex = 0;
-    this.providerStats = {};
-    this.notifyCallback = notifyCallback; // Telegram notification callback
-
+    this.notifyCallback = notifyCallback;
     this.initializeProviders();
   }
 
   initializeProviders() {
-    // === GEMINI PRIMARY (better quality, 16k output, no truncation) ===
+    // Gemini first (best quality)
     const geminiKeys = this.loadApiKeys('GEMINI_API_KEY');
     geminiKeys.forEach((key, idx) => {
       if (key && !key.includes('paste_your')) {
-        this.providers.push({
-          type: 'gemini',
-          key: key,
-          client: new GoogleGenerativeAI(key),
-          name: `Gemini #${idx + 1}`,
-        });
+        this.providers.push({ type: 'gemini', key, client: new GoogleGenerativeAI(key), name: `Gemini #${idx + 1}` });
       }
     });
 
-    // === GROQ as fallback ===
+    // Groq as fallback (OpenAI-compatible, supports function calling)
     const groqKeys = this.loadApiKeys('GROQ_API_KEY');
     groqKeys.forEach((key, idx) => {
-      this.providers.push({
-        type: 'groq',
-        key: key,
-        client: new Groq({
-          apiKey: key,
-          timeout: 10 * 60 * 1000,
-        }),
-        name: `Groq #${idx + 1}`,
-      });
+      this.providers.push({ type: 'groq', key, client: new Groq({ apiKey: key, timeout: 120000 }), name: `Groq #${idx + 1}` });
     });
 
-    // === OpenAI as fallback ===
+    // OpenAI as fallback
     const openaiKeys = this.loadApiKeys('OPENAI_API_KEY');
     openaiKeys.forEach((key, idx) => {
       if (key && !key.includes('paste_your')) {
-        this.providers.push({
-          type: 'openai',
-          key: key,
-          client: new OpenAI({
-            apiKey: key,
-            timeout: 10 * 60 * 1000,
-          }),
-          name: `OpenAI #${idx + 1}`,
-        });
+        this.providers.push({ type: 'openai', key, client: new OpenAI({ apiKey: key, timeout: 120000 }), name: `OpenAI #${idx + 1}` });
       }
     });
 
@@ -71,146 +48,173 @@ class MultiLLMProvider {
     const keys = [];
     for (let i = 1; i <= 20; i++) {
       const key = this.env[`${prefix}${i === 1 ? '' : '_' + i}`];
-      if (
-        key &&
-        key !== `your_${prefix.toLowerCase()}_key_here` &&
-        key !== `your_${prefix.toLowerCase()}_key_${i}_here`
-      ) {
-        keys.push(key);
-      }
+      if (key && !key.includes('paste_your') && !key.includes('your_')) keys.push(key);
     }
     return keys;
   }
 
-  getCurrentProvider() {
-    return this.providers[this.currentProviderIndex];
-  }
+  getCurrentProvider() { return this.providers[this.currentProviderIndex]; }
 
   rotateProvider() {
     this.currentProviderIndex = (this.currentProviderIndex + 1) % this.providers.length;
-    const provider = this.getCurrentProvider();
-    console.log(`🔄 Rotating to: ${provider.name}`);
+    console.log(`🔄 Rotating to: ${this.getCurrentProvider().name}`);
   }
 
+  /**
+   * Standard text completion (no tools) — for classifier, summaries, etc.
+   */
   async callLLM(messages, options = {}) {
-    if (this.providers.length === 0) {
-      throw new Error('❌ No LLM providers configured');
-    }
-
-    let lastError = null;
     let attempts = 0;
-    const maxAttempts = this.providers.length;
-    const timeout = options.timeout || 30 * 1000; // 30 seconds default
+    let lastError = null;
 
-    while (attempts < maxAttempts) {
+    while (attempts < this.providers.length) {
       const provider = this.getCurrentProvider();
       attempts++;
-
       try {
-        console.log(`📞 Calling ${provider.name}... (timeout: ${timeout / 1000}s)`);
-
-        let response;
-
-        if (provider.type === 'groq') {
-          try {
-            response = await provider.client.chat.completions.create({
-              model: options.model || 'qwen/qwen3.8-27b',
-              messages: messages,
-              temperature: options.temperature || 0.7,
-              max_tokens: options.max_tokens || 800,
-            });
-            const content = response.choices[0]?.message?.content || '';
-            console.log(`✅ ${provider.name} succeeded`);
-            return content;
-          } catch (err) {
-            throw err;
-          }
-        } else if (provider.type === 'gemini') {
-          try {
-            const systemPrompt = messages[0]?.role === 'system' ? messages[0]?.content : '';
-            const userMessages = messages.filter((m) => m.role !== 'system');
-
-            // Convert full conversation to Gemini's contents format
-            // This preserves multi-turn context (the bug was: only last message was sent)
-            const contents = userMessages.map(m => ({
-              role: m.role === 'assistant' ? 'model' : 'user',
-              parts: [{ text: m.content }],
-            }));
-
-            const modelConfig = {
-              model: 'gemini-3.5-flash-lite',
-              generationConfig: {
-                maxOutputTokens: 8192,
-                temperature: options.temperature || 0.3,
-              },
-            };
-            if (systemPrompt) {
-              modelConfig.systemInstruction = {
-                parts: [{ text: systemPrompt }],
-              };
-            }
-
-            const model = provider.client.getGenerativeModel(modelConfig);
-            const result = await model.generateContent({ contents });
-            const content = result.response.text();
-            console.log(`✅ ${provider.name} succeeded`);
-            return content;
-          } catch (err) {
-            throw err;
-          }
-        } else if (provider.type === 'openai') {
-          try {
-            response = await provider.client.chat.completions.create({
-              model: options.model || 'gpt-4o-mini',
-              messages: messages,
-              temperature: options.temperature || 0.7,
-              max_tokens: options.max_tokens || 800,
-            });
-            const content = response.choices[0]?.message?.content || '';
-            console.log(`✅ ${provider.name} succeeded`);
-            return content;
-          } catch (err) {
-            throw err;
-          }
-        }
-      } catch (error) {
-        lastError = error;
-        console.error(`❌ ${provider.name} failed:`);
-        console.error(`   Error: ${error.message}`);
-
-        if (
-          error.message.includes('429') ||
-          error.message.includes('rate limit') ||
-          error.message.includes('quota')
-        ) {
-          console.log(`⚠️ Rate limit hit. Rotating to next provider...`);
-          if (this.notifyCallback) {
-            this.notifyCallback(`⚠️ RATE LIMIT: ${provider.name} exhausted`);
-          }
-          this.rotateProvider();
-        } else if (error.message.includes('timeout') || error.message.includes('timed out')) {
-          console.log(`⏱️ Timeout on ${provider.name}. Rotating...`);
-          if (this.notifyCallback) {
-            this.notifyCallback(`⏱️ TIMEOUT: ${provider.name}`);
-          }
-          this.rotateProvider();
-        } else {
-          console.log(`⚠️ Error on ${provider.name}. Trying next...`);
-          this.rotateProvider();
-        }
+        console.log(`📞 Calling ${provider.name}... (timeout: ${(options.timeout || 30000) / 1000}s)`);
+        const text = await this._callProvider(provider, messages, options);
+        console.log(`✅ ${provider.name} succeeded`);
+        return text;
+      } catch (err) {
+        lastError = err;
+        console.error(`❌ ${provider.name} failed: ${err.message}`);
+        this.rotateProvider();
       }
     }
+    throw new Error(`All providers failed. Last: ${lastError?.message}`);
+  }
 
-    throw new Error(
-      `❌ All ${maxAttempts} LLM providers failed. Last error: ${lastError?.message}`
-    );
+  /**
+   * Native function calling — sends tool schemas to model, gets back structured tool calls.
+   * This is how Hermes works. Models are much more reliable with this vs text parsing.
+   *
+   * Returns: { text: string, toolCalls: [{name, args}] }
+   */
+  async callLLMWithTools(messages, toolSchemas, options = {}) {
+    let attempts = 0;
+    let lastError = null;
+
+    while (attempts < this.providers.length) {
+      const provider = this.getCurrentProvider();
+      attempts++;
+      try {
+        console.log(`📞 Calling ${provider.name} with tools... (${toolSchemas.length} tools)`);
+        const result = await this._callProviderWithTools(provider, messages, toolSchemas, options);
+        console.log(`✅ ${provider.name} succeeded`);
+        return result;
+      } catch (err) {
+        lastError = err;
+        console.error(`❌ ${provider.name} failed: ${err.message}`);
+        this.rotateProvider();
+      }
+    }
+    throw new Error(`All providers failed. Last: ${lastError?.message}`);
+  }
+
+  async _callProvider(provider, messages, options) {
+    if (provider.type === 'groq' || provider.type === 'openai') {
+      const res = await provider.client.chat.completions.create({
+        model: provider.type === 'groq' ? 'llama-3.3-70b-versatile' : 'gpt-4o-mini',
+        messages,
+        temperature: options.temperature ?? 0.3,
+        max_tokens: options.max_tokens || 1000,
+      });
+      return res.choices[0]?.message?.content || '';
+    }
+
+    if (provider.type === 'gemini') {
+      const systemPrompt = messages.find(m => m.role === 'system')?.content || '';
+      const contents = messages.filter(m => m.role !== 'system').map(m => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }],
+      }));
+      const model = provider.client.getGenerativeModel({
+        model: 'gemini-2.0-flash',
+        generationConfig: { maxOutputTokens: 8192, temperature: options.temperature ?? 0.3 },
+        ...(systemPrompt ? { systemInstruction: { parts: [{ text: systemPrompt }] } } : {}),
+      });
+      const result = await model.generateContent({ contents });
+      return result.response.text();
+    }
+  }
+
+  async _callProviderWithTools(provider, messages, toolSchemas, options) {
+    // Convert tool schemas to OpenAI format
+    const tools = toolSchemas.map(t => ({
+      type: 'function',
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters || { type: 'object', properties: {}, required: [] },
+      },
+    }));
+
+    if (provider.type === 'groq' || provider.type === 'openai') {
+      const res = await provider.client.chat.completions.create({
+        model: provider.type === 'groq' ? 'llama-3.3-70b-versatile' : 'gpt-4o-mini',
+        messages,
+        tools,
+        tool_choice: 'auto',
+        temperature: options.temperature ?? 0.3,
+        max_tokens: options.max_tokens || 2000,
+      });
+
+      const msg = res.choices[0]?.message;
+      const toolCalls = (msg?.tool_calls || []).map(tc => ({
+        name: tc.function.name,
+        args: JSON.parse(tc.function.arguments || '{}'),
+        id: tc.id,
+      }));
+
+      return { text: msg?.content || '', toolCalls, raw: msg };
+    }
+
+    if (provider.type === 'gemini') {
+      const systemPrompt = messages.find(m => m.role === 'system')?.content || '';
+      const contents = messages.filter(m => m.role !== 'system').map(m => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }],
+      }));
+
+      // Gemini function declarations
+      const functionDeclarations = toolSchemas.map(t => ({
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters || { type: 'object', properties: {} },
+      }));
+
+      const model = provider.client.getGenerativeModel({
+        model: 'gemini-2.0-flash',
+        generationConfig: { maxOutputTokens: 8192, temperature: options.temperature ?? 0.3 },
+        tools: [{ functionDeclarations }],
+        ...(systemPrompt ? { systemInstruction: { parts: [{ text: systemPrompt }] } } : {}),
+      });
+
+      const result = await model.generateContent({ contents });
+      const response = result.response;
+      const text = response.text ? response.text() : '';
+
+      // Extract function calls from Gemini response
+      const toolCalls = [];
+      for (const candidate of response.candidates || []) {
+        for (const part of candidate.content?.parts || []) {
+          if (part.functionCall) {
+            toolCalls.push({ name: part.functionCall.name, args: part.functionCall.args || {} });
+          }
+        }
+      }
+
+      return { text, toolCalls };
+    }
+
+    throw new Error(`Provider type ${provider.type} not supported for tool calling`);
   }
 
   getStats() {
     return {
       totalProviders: this.providers.length,
       currentProvider: this.getCurrentProvider()?.name,
-      providers: this.providers.map((p) => p.name),
+      providers: this.providers.map(p => p.name),
     };
   }
 }

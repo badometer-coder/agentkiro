@@ -1692,145 +1692,129 @@ ${fileErrors}`;
       return;
     }
 
-    // --- LLM handles everything else (including "make a change on login", "plan about X", etc.) ---
-    const stats = memory.getStats();
-    const taskPreview = taskQueue.slice(0, 5).map((t, i) => `${i+1}. ${t.substring(0, 80)}`).join('\n');
+    // --- LLM handles everything else with NATIVE FUNCTION CALLING (like Hermes) ---
 
-    // Add to conversation history for context
+    // Add to conversation history
     conversationHistory.push({ role: 'user', content: raw });
     if (conversationHistory.length > 30) conversationHistory = conversationHistory.slice(-30);
 
-    // DEBUG: show what's in history so we can see if memory is working
     console.log(`📜 History (${conversationHistory.length} entries):`);
-    conversationHistory.slice(-6).forEach((m, i) => {
+    conversationHistory.slice(-4).forEach((m, i) => {
       console.log(`  [${i}] ${m.role}: ${m.content.substring(0, 80)}...`);
     });
 
-    // Inject current date into system prompt — use local server timezone, not UTC
     const serverDate = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     const serverTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-
-    // Load relevant skills based on user message
     const skillsContext = skillsManager.loadSkillsForContext(raw);
 
-    const llmReply = await llmProvider.callLLM([
-      {
-        role: 'system',
-        content: `You are Fag, a smart conversational AI agent with coding, web search, and memory capabilities.
+    const systemPrompt = `You are Fag, an AI coding agent for the Proximity social app.
 
 📅 TODAY: ${serverDate} — ${serverTime}
 
-📱 PROJECT CONTEXT:
-- Proximity app GitHub repo: https://github.com/badometer-coder/proximity-app
-- Local path: /Users/owner/proximity-app-final
-- Stack: React Native + Expo + TypeScript + Supabase
-- EAS project: proximity-app-final (dani-prox account)
-- Auto-updates via EAS Update to "preview" channel on every push to main
-- CI webhook: https://agent-swarm-ceti.onrender.com/ci-error (notifies you on TypeScript errors)
+📱 PROJECT: React Native + Expo + TypeScript + Supabase
+- GitHub: https://github.com/badometer-coder/proximity-app
+- Auto-deploys on every push to main branch
 
-🔧 YOU HAVE EXACTLY THESE TOOLS AND NO OTHERS:
-[TOOL: tool_name {"param": "value"}]
+You have tools to read and write files directly to GitHub.
+Use them to actually implement what the user asks.
+For conversational questions, answer directly without tools.${skillsContext}`;
 
-- read_file {"path": "src/file.tsx"} → Read a file
-- write_file {"path": "src/file.tsx", "content": "..."} → Create or overwrite a file
-- patch {"path": "src/file.tsx", "old_string": "...", "new_string": "..."} → Targeted edit
-- terminal {"command": "npm test"} → Run shell command
-- web_search {"query": "..."} → Search web
-- get_time {} → Current time
-- get_date {} → Current date
-- remember {"type": "pattern|insight", "content": "..."} → Save a learning
-- memory_stats {} → Memory stats
-
-DO NOT INVENT TOOLS. Do not use: run_command, bash, exec, shell, ls, list_dir, cat, or anything not listed above.
-
-RULES:
-- Conversational questions (check about X, do you have access to X, tell me about X, how is X) → Answer directly from your knowledge. NO tools.
-- "do you have access to github/files/repo" → Answer YES, you have read_file and terminal. Do NOT call tools to prove it.
-- Only use tools when doing actual coding work (reading/writing/running files).
-- For coding: ALWAYS read_file first, then patch.
-- Call ONE tool per response. Wait for result before next.
-- NEVER output [TOOL: ...] text in your reply — tools run silently, user never sees them.
-- Be direct and conversational.${skillsContext}`,
+    // Tool schemas for native function calling
+    const toolSchemas = [
+      {
+        name: 'read_file',
+        description: 'Read a file from the GitHub repo to understand current code before editing.',
+        parameters: {
+          type: 'object',
+          properties: { path: { type: 'string', description: 'File path e.g. "src/screens/main/HomeScreen.tsx"' } },
+          required: ['path'],
+        },
       },
-      ...conversationHistory,
-    ], { temperature: 0.3, max_tokens: 500 });
+      {
+        name: 'write_file',
+        description: 'Write/create a file in GitHub repo. Auto-commits and pushes.',
+        parameters: {
+          type: 'object',
+          properties: {
+            path: { type: 'string' },
+            content: { type: 'string', description: 'Complete file content' },
+            message: { type: 'string', description: 'Commit message' },
+          },
+          required: ['path', 'content'],
+        },
+      },
+      {
+        name: 'patch',
+        description: 'Find old_string in a file and replace with new_string. Auto-commits. ALWAYS read_file first to get exact text.',
+        parameters: {
+          type: 'object',
+          properties: {
+            path: { type: 'string' },
+            old_string: { type: 'string', description: 'Exact text to find (copy from read_file output)' },
+            new_string: { type: 'string', description: 'Replacement text' },
+          },
+          required: ['path', 'old_string', 'new_string'],
+        },
+      },
+      {
+        name: 'web_search',
+        description: 'Search the web for documentation or solutions.',
+        parameters: {
+          type: 'object',
+          properties: { query: { type: 'string' } },
+          required: ['query'],
+        },
+      },
+    ];
 
-    console.log(`🤖 LLM raw reply: "${llmReply.substring(0, 200)}"`);
-
-    // === TOOL LOOP (Hermes-style) — allow multiple rounds of tool calls ===
-    let finalReply = llmReply;
-    const MAX_TOOL_ROUNDS = 5; // reduced from 10 — conversational tasks need fewer rounds
+    // Native function calling loop — like Hermes
+    const messages = [{ role: 'system', content: systemPrompt }, ...conversationHistory];
+    let finalReply = '';
+    const MAX_ROUNDS = 10;
     let round = 0;
 
-    while (round < MAX_TOOL_ROUNDS) {
-      const toolCalls = [...finalReply.matchAll(/\[TOOL:\s*(\w+)\s*({[^}]*})\]/g)];
+    while (round < MAX_ROUNDS) {
+      const result = await llmProvider.callLLMWithTools(messages, toolSchemas, { temperature: 0.3 });
 
-      if (toolCalls.length === 0) break; // no more tool calls — we have the final answer
-
-      console.log(`🔧 Round ${round + 1}: executing ${toolCalls.length} tool(s)...`);
-
-      // Execute all tools in this round
-      let toolResults = '';
-      for (const match of toolCalls) {
-        try {
-          const toolName = match[1];
-          const params = JSON.parse(match[2]);
-          console.log(`  Tool: ${toolName}(${JSON.stringify(params).substring(0, 100)})`);
-          
-          // 📝 Log tool call for self-improvement engine
-          selfImprovementEngine.logToolCall({
-            toolName,
-            input: params,
-            timestamp: Date.now(),
-          });
-          
-          const result = await agentTools.executeTool(toolName, params);
-          // Truncate long results (file contents can be huge)
-          const trimmed = (result || '').length > 3000
-            ? (result || '').substring(0, 3000) + '\n... (truncated)'
-            : result || '';
-          toolResults += `\n[Tool: ${toolName}]\n${trimmed}\n`;
-        } catch (e) {
-          console.log(`  Tool error: ${e.message}`);
-          toolResults += `\n[Tool: ${toolName}] Error: ${e.message}\n`;
-        }
+      // No tool calls — this is the final answer
+      if (!result.toolCalls || result.toolCalls.length === 0) {
+        finalReply = result.text || 'Done.';
+        break;
       }
 
-      // Feed tool results back to LLM — it may call more tools or give final answer
-      const toolContext = [
-        {
-          role: 'system',
-          content: `You are Fag, a smart conversational AI agent with coding tools. Today: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.
+      console.log(`🔧 Round ${round + 1}: ${result.toolCalls.length} tool call(s)`);
 
-You just called tools. Based on the results, either:
-- Call another tool (e.g. patch to fix an error, read_file to check another file)
-- Or give your final answer to the user (no tool call, just text).
+      // Add assistant message with tool calls to conversation
+      messages.push({ role: 'assistant', content: result.text || '', tool_calls: result.raw?.tool_calls });
 
-Remember: [TOOL: tool_name {"param": "value"}] format for tool calls.`,
-        },
-        ...conversationHistory.slice(-12),
-        { role: 'assistant', content: finalReply },
-        { role: 'user', content: `Tool results:\n${toolResults}\nContinue. Either call the next tool or give the final answer.` },
-      ];
+      // Execute each tool call
+      for (const tc of result.toolCalls) {
+        console.log(`  → ${tc.name}(${JSON.stringify(tc.args).substring(0, 100)})`);
 
-      try {
-        finalReply = await llmProvider.callLLM(toolContext, { temperature: 0.3, max_tokens: 1000 });
-        console.log(`🤖 Round ${round + 1} reply: "${finalReply.substring(0, 200)}"`);
-      } catch (e) {
-        console.log(`  LLM call failed: ${e.message}`);
-        finalReply = `Tool results:\n${toolResults}`;
-        break;
+        selfImprovementEngine.logToolCall({ toolName: tc.name, input: tc.args, timestamp: Date.now() });
+
+        const toolResult = await agentTools.executeTool(tc.name, tc.args);
+        const trimmed = (toolResult || '').length > 3000
+          ? (toolResult || '').substring(0, 3000) + '\n...(truncated)'
+          : toolResult || '';
+
+        console.log(`  ← ${tc.name} result: ${trimmed.substring(0, 80)}...`);
+
+        // Add tool result to messages (OpenAI format)
+        messages.push({
+          role: 'tool',
+          tool_call_id: tc.id || tc.name,
+          content: trimmed,
+        });
       }
 
       round++;
     }
 
-    // Remove tool call tags from the final reply shown to user (strip any format)
-    const cleanToolReply = finalReply
-      .replace(/\[TOOL:\s*\w+\s*\{[\s\S]*?\}\]/g, '')   // [TOOL: name {...}]
-      .replace(/\[TOOL:\s*\w+[^\]]*\]/g, '')              // [TOOL: name ...]
-      .trim();
-    finalReply = cleanToolReply || 'Done.';  // never show raw tool calls to user
+    if (!finalReply) finalReply = 'Done.';
+
+    // Remove any leaked tool syntax just in case
+    finalReply = finalReply.replace(/\[TOOL:[^\]]*\]/g, '').trim() || finalReply;
 
     // Store the FINAL reply (not the tool call) in conversation history
     conversationHistory.push({ role: 'assistant', content: finalReply });
