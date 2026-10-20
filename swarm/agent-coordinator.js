@@ -104,8 +104,37 @@ NAVIGATION: Expo Router (file-based routing)
 let taskQueue = [];
 let currentTask = null;
 let taskLog = [];
-let conversationHistory = []; // Remember last 10 messages
 let stopRequested = false; // Global stop flag — set by "stop" command
+
+// === CONVERSATION PERSISTENCE (Hermes-style: save to disk, load on startup) ===
+const conversationFile = path.join(__dirname, 'memory', 'conversation.json');
+
+function loadConversationHistory() {
+  try {
+    if (fs.existsSync(conversationFile)) {
+      const data = JSON.parse(fs.readFileSync(conversationFile, 'utf-8'));
+      if (Array.isArray(data) && data.length > 0) {
+        console.log(`📜 Loaded ${data.length} conversation entries from disk`);
+        return data.slice(-30); // keep last 30
+      }
+    }
+  } catch (e) {
+    console.log(`⚠️ Could not load conversation history: ${e.message}`);
+  }
+  return [];
+}
+
+function saveConversationHistory() {
+  try {
+    const dir = path.dirname(conversationFile);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(conversationFile, JSON.stringify(conversationHistory.slice(-30)), 'utf-8');
+  } catch (e) {
+    console.log(`⚠️ Could not save conversation history: ${e.message}`);
+  }
+}
+
+let conversationHistory = loadConversationHistory();
 
 async function createExecutionPlan(topic = null) {
   try {
@@ -1721,7 +1750,8 @@ Remember: [TOOL: tool_name {"param": "value"}] format for tool calls.`,
 
     // Store the FINAL reply (not the tool call) in conversation history
     conversationHistory.push({ role: 'assistant', content: finalReply });
-    if (conversationHistory.length > 20) conversationHistory = conversationHistory.slice(-20);
+    if (conversationHistory.length > 30) conversationHistory = conversationHistory.slice(-30);
+    saveConversationHistory(); // persist to disk (survives restarts)
 
     // Parse action tags
     const cleanReply = finalReply.replace(/\[(DOTASK|DOPLAN|RUN):[^\]]*\]/g, '').trim();
