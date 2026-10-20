@@ -1728,36 +1728,28 @@ ${fileErrors}`;
 - Auto-updates via EAS Update to "preview" channel on every push to main
 - CI webhook: https://agent-swarm-ceti.onrender.com/ci-error (notifies you on TypeScript errors)
 
-🔧 YOU HAVE TOOLS. Call them using this format in your response:
+🔧 YOU HAVE EXACTLY THESE TOOLS AND NO OTHERS:
 [TOOL: tool_name {"param": "value"}]
 
-CODING TOOLS (use these to build features):
-- read_file {"path": "src/file.tsx"} → Read a file (with line numbers). ALWAYS read before editing.
+- read_file {"path": "src/file.tsx"} → Read a file
 - write_file {"path": "src/file.tsx", "content": "..."} → Create or overwrite a file
-- patch {"path": "src/file.tsx", "old_string": "...", "new_string": "..."} → Targeted edit (preferred over write_file for existing files)
-- terminal {"command": "npm test"} → Run shell command (tests, git, etc.)
-
-WORKFLOW for coding tasks:
-1. read_file to see the current code
-2. patch to make targeted changes (or write_file for new files)
-3. terminal to run tests / check for errors
-4. If errors, read the file again and patch to fix
-
-OTHER TOOLS:
+- patch {"path": "src/file.tsx", "old_string": "...", "new_string": "..."} → Targeted edit
+- terminal {"command": "npm test"} → Run shell command
+- web_search {"query": "..."} → Search web
 - get_time {} → Current time
 - get_date {} → Current date
-- web_search {"query": "..."} → Search web for docs, news, solutions
 - remember {"type": "pattern|insight", "content": "..."} → Save a learning
 - memory_stats {} → Memory stats
 
+DO NOT INVENT TOOLS. Do not use: run_command, bash, exec, shell, ls, list_dir, cat, or anything not listed above.
+
 RULES:
-- Simple questions (what is X, tell me about X, check about X, how is X going) → Answer directly from your knowledge/context. DO NOT call any tools.
-- "what day is it?" → Answer directly using TODAY above. NO tools.
-- Only use tools when you need to READ/WRITE files or RUN commands for actual coding work.
-- For coding tasks: ALWAYS read_file first, then patch. Never blindly rewrite.
-- Call ONE tool per response. Wait for the result before calling the next.
-- DO NOT use web_search for questions you can answer from context or memory.
-- NEVER show [TOOL: ...] in your reply to the user — tools are silent internal actions.
+- Conversational questions (check about X, do you have access to X, tell me about X, how is X) → Answer directly from your knowledge. NO tools.
+- "do you have access to github/files/repo" → Answer YES, you have read_file and terminal. Do NOT call tools to prove it.
+- Only use tools when doing actual coding work (reading/writing/running files).
+- For coding: ALWAYS read_file first, then patch.
+- Call ONE tool per response. Wait for result before next.
+- NEVER output [TOOL: ...] text in your reply — tools run silently, user never sees them.
 - Be direct and conversational.${skillsContext}`,
       },
       ...conversationHistory,
