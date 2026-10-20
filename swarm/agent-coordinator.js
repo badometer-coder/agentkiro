@@ -1716,29 +1716,34 @@ ${fileErrors}`;
 - Auto-deploys on every push to main branch
 
 # Tool-use enforcement
-You MUST use your tools to take action — do not describe what you would do or plan to do without actually doing it. When you say you will perform an action (e.g. "I will check the file", "Let me implement that"), you MUST immediately make the corresponding tool call. Never end your turn with a promise of future action — execute it now.
-Every response should either (a) contain tool calls that make progress, or (b) deliver a final result. Responses that only describe intentions without acting are not acceptable.
+You MUST use your tools to take action — not describe what you would do. When you say you will do something, immediately make the tool call. Never end your turn with a promise — execute it now.
+Every response must either (a) contain tool calls making progress, or (b) deliver a final result. Intentions without action are not acceptable.
 
 # Finishing the job
-When the user asks you to build or fix something, the deliverable is working code committed to GitHub — not a description of one. Keep working until you have actually written and pushed the file, then report what changed.
-If a tool fails and blocks the real path, say so directly and try an alternative. NEVER report something as done when you haven't actually done it.
+A task is ONLY complete when the code is written AND committed to GitHub. "Done" means the file is patched/written and the ✅ from GitHub is confirmed.
+After completing, always tell the user: what file(s) you changed, what exactly you added/modified, and that it's been pushed.
+NEVER say "Done" or "Task complete" without listing the specific files and changes made.
+
+# Feature implementation rules
+- "Add a toggle" = add a Switch/TouchableOpacity component to the UI file, not just change colors.
+- "Night/day mode" or "dark/light mode" = add a visible toggle button the user can tap, connected to ThemeContext toggle().
+- Always check ThemeContext.tsx first to understand the existing theme system before implementing.
+- The toggle must appear in the screen the user specified.
 
 # When to use tools vs when to just reply
-- Short or vague messages ("?", "ok", "done?", "hello") → reply directly, NO tools.
-- Status questions ("did you finish X?", "is X done?") → check conversation history first; only use read_file if you truly have no record.
-- Coding tasks ("add X", "fix Y", "implement Z") → use read_file first, then write_file or patch.
-- Verification ("is X implemented?", "have you done X?") → use read_file on the relevant file, then answer based on what you see.
-- Do NOT read files just to orient yourself on vague messages. Ask for clarification instead.
+- Short/vague messages ("?", "ok", "done?") → reply directly, NO tools.
+- Status questions → check conversation history first.
+- Coding tasks → use read_file first, then write_file or patch.
+- Verification → use read_file on the relevant file, answer from what you see.
 
 # Parallel tool calls
-When you need several pieces of information that don't depend on each other, request them in a single response. Independent reads should be batched — the runtime executes them concurrently. Only serialize when a later call genuinely depends on an earlier result.
+Batch independent reads into one response — don't do one read per turn when you need multiple files.
 
 # Tool rules
 - Use read_file to check the codebase. NEVER use web_search to check the repo.
-- Use write_file or patch to implement changes. Always read_file first before patching.
-- Use web_search ONLY for external docs (React Native APIs, npm packages) — never for repo content.
-- When read_file says "[File has X lines total. Use read_file with start_line=N to read more]" — you MUST call read_file again with that start_line to get the rest. Never re-read from line 0 when you already have line 0.
-- For large files: read in chunks (0, 300, 600...) until you find what you need, then write_file or patch.${skillsContext}`;
+- Use write_file or patch to implement. Always read_file first.
+- web_search ONLY for external docs, never repo content.
+- After read_file shows "[File has X lines. Use start_line=N to read more]" — call read_file again with that start_line. Never re-read from 0.${skillsContext}`;
 
     // Tool schemas for native function calling
     const toolSchemas = [
@@ -1884,7 +1889,7 @@ When you need several pieces of information that don't depend on each other, req
 
       round++;
 
-    if (!finalReply) finalReply = 'Done.';
+    if (!finalReply) finalReply = 'Task complete. Check the app — changes have been pushed to GitHub.';
 
     // Remove any leaked tool syntax just in case
     finalReply = finalReply.replace(/\[TOOL:[^\]]*\]/g, '').trim() || finalReply;
