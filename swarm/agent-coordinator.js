@@ -1604,15 +1604,16 @@ ${fileErrors}`;
     conversationHistory.push({ role: 'user', content: raw });
     if (conversationHistory.length > 10) conversationHistory = conversationHistory.slice(-10);
 
-    // Inject current date into system prompt — Render blocks outbound fetch so tools can't get it externally
-    const serverDate = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
+    // Inject current date into system prompt — use local server timezone, not UTC
+    const serverDate = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    const serverTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
     const llmReply = await llmProvider.callLLM([
       {
         role: 'system',
         content: `You are Fag, a smart conversational AI assistant with web search capability.
 
-📅 SERVER DATE (UTC): ${serverDate}
+📅 TODAY: ${serverDate} — ${serverTime} (East Africa Time)
 
 🔧 YOU HAVE TOOLS. Use this format when needed:
 [TOOL: tool_name {"param": "value"}]
@@ -1625,21 +1626,17 @@ AVAILABLE TOOLS:
 - remember {"type": "pattern|solution|insight", "content": "..."} → Save learning
 
 RULES:
-- "what time is it?" → You MUST respond with ONLY: [TOOL: get_time {}]
-- "what day is it?" → Answer directly using the SERVER DATE above — do NOT call a tool
-- "what's today" / "today's date" → Answer directly using the SERVER DATE above
-- DO NOT say you lack access to real-time info — you have the date above
+- "what day is it?" / "what's today?" → Answer directly using TODAY above — do NOT guess
+- "what time is it?" → Answer directly using TODAY above — do NOT guess
 - news/current events/recent demos → [TOOL: web_search {"query": "..."}]
 - coding tasks for Proximity app → [DOTASK: description]
+- DO NOT say you lack access to real-time info — you have the date/time above
 - NEVER say "I don't have access to real-time info" — either search or answer from knowledge
 - If search returns nothing useful, answer from your own training knowledge
 - Be direct, conversational, under 80 words`,
       },
       ...conversationHistory,
     ], { temperature: 0.3, max_tokens: 200 });
-
-    // Add to history
-    conversationHistory.push({ role: 'assistant', content: llmReply });
 
     // DEBUG: log what the LLM actually said (helps diagnose tool call issues)
     console.log(`🤖 LLM raw reply: "${llmReply.substring(0, 200)}"`);
@@ -1666,40 +1663,40 @@ RULES:
         }
       }
       
-      // Get final response with tool results
-      // IMPORTANT: include system prompt + original user question + tool results
-      // so the LLM always has full context (same pattern as Hermes)
       if (toolResults) {
         const hasUsefulResults = toolResults.trim().length > 30
           && !toolResults.includes('No results found')
           && !toolResults.includes('Search failed')
           && !toolResults.includes('fetch failed')
           && !toolResults.includes('Could not fetch');
-        const originalQuestion = raw;
 
         const toolContext = [
           {
             role: 'system',
-            content: `You are Fag, a smart conversational AI assistant. Answer the user's question directly and concisely. Server date (UTC): ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' })}`,
+            content: `You are Fag, a smart conversational AI assistant. Answer the user's question directly and concisely. Today: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`,
           },
-          { role: 'user', content: originalQuestion },
+          // Include conversation history BEFORE the tool call (excludes the [TOOL:...] turn)
+          ...conversationHistory.slice(-6),
           {
             role: 'user',
             content: hasUsefulResults
-              ? `[Tool results for "${originalQuestion}"]:${toolResults}\nAnswer the question above using these results.`
-              : `[Web search unavailable — network restricted on server]\nAnswer "${originalQuestion}" using your own training knowledge. Be direct and helpful.`
+              ? `[Tool results for "${raw}"]:${toolResults}\nAnswer the user's question using these results. Be direct.`
+              : `[Web search returned no useful results for "${raw}"]\nAnswer using your own knowledge. Be direct and helpful.`
           }
         ];
         
         try {
           finalReply = await llmProvider.callLLM(toolContext, { temperature: 0.3, max_tokens: 300 });
-          conversationHistory.push({ role: 'assistant', content: finalReply });
         } catch (e) {
           console.log(`  Failed to get final response: ${e.message}`);
-          finalReply = hasUsefulResults ? `Here's what I found:\n${toolResults}` : `I couldn't find that online, but based on my knowledge: [answer unavailable]`;
+          finalReply = hasUsefulResults ? toolResults : `I couldn't find current info on that.`;
         }
       }
     }
+
+    // Store the FINAL reply (not the tool call) in conversation history
+    conversationHistory.push({ role: 'assistant', content: finalReply });
+    if (conversationHistory.length > 20) conversationHistory = conversationHistory.slice(-20);
 
     // Parse action tags
     const cleanReply = finalReply.replace(/\[(DOTASK|DOPLAN|RUN):[^\]]*\]/g, '').trim();
