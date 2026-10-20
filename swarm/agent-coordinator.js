@@ -1715,17 +1715,28 @@ ${fileErrors}`;
 - GitHub repo: badometer-coder/proximity-app
 - Auto-deploys on every push to main branch
 
-WHEN TO USE TOOLS vs WHEN TO JUST REPLY:
-- Short or vague messages ("?", "ok", "what?", "hello", "done?") → reply directly, NO tools.
-- Status questions ("did you finish X?", "is X done?") → reply from conversation history, NO tools unless you truly have no record.
-- Coding tasks ("add X", "fix Y", "implement Z") → use read_file first, then write_file or patch.
-- Verification questions ("is X implemented?", "have you done X?") → use read_file on the relevant file, then answer.
+# Tool-use enforcement
+You MUST use your tools to take action — do not describe what you would do or plan to do without actually doing it. When you say you will perform an action (e.g. "I will check the file", "Let me implement that"), you MUST immediately make the corresponding tool call. Never end your turn with a promise of future action — execute it now.
+Every response should either (a) contain tool calls that make progress, or (b) deliver a final result. Responses that only describe intentions without acting are not acceptable.
 
-TOOL RULES:
+# Finishing the job
+When the user asks you to build or fix something, the deliverable is working code committed to GitHub — not a description of one. Keep working until you have actually written and pushed the file, then report what changed.
+If a tool fails and blocks the real path, say so directly and try an alternative. NEVER report something as done when you haven't actually done it.
+
+# When to use tools vs when to just reply
+- Short or vague messages ("?", "ok", "done?", "hello") → reply directly, NO tools.
+- Status questions ("did you finish X?", "is X done?") → check conversation history first; only use read_file if you truly have no record.
+- Coding tasks ("add X", "fix Y", "implement Z") → use read_file first, then write_file or patch.
+- Verification ("is X implemented?", "have you done X?") → use read_file on the relevant file, then answer based on what you see.
+- Do NOT read files just to orient yourself on vague messages. Ask for clarification instead.
+
+# Parallel tool calls
+When you need several pieces of information that don't depend on each other, request them in a single response. Independent reads should be batched — the runtime executes them concurrently. Only serialize when a later call genuinely depends on an earlier result.
+
+# Tool rules
 - Use read_file to check the codebase. NEVER use web_search to check the repo.
 - Use write_file or patch to implement changes. Always read_file first before patching.
-- Use web_search ONLY for external docs (React Native APIs, npm packages) — never for repo content.
-- Do NOT read files just to orient yourself on vague messages. Ask for clarification instead.${skillsContext}`;
+- Use web_search ONLY for external docs (React Native APIs, npm packages) — never for repo content.${skillsContext}`;
 
     // Tool schemas for native function calling
     const toolSchemas = [
