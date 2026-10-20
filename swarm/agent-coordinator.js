@@ -1780,6 +1780,7 @@ TOOL RULES — follow strictly:
     let round = 0;
     let lastToolCallJson = '';
     let toolStuckCount = 0;
+    const readFilesThisTurn = new Map(); // track file reads — avoid redundant re-reads
 
     while (round < MAX_ROUNDS) {
       const result = await llmProvider.callLLMWithTools(messages, toolSchemas, { temperature: 0.3 });
@@ -1815,7 +1816,20 @@ TOOL RULES — follow strictly:
 
         selfImprovementEngine.logToolCall({ toolName: tc.name, input: tc.args, timestamp: Date.now() });
 
-        const toolResult = await agentTools.executeTool(tc.name, tc.args);
+        // Hermes-style read tracking: return cached content if already read this turn
+        let toolResult;
+        if (tc.name === 'read_file' && tc.args?.path) {
+          const cacheKey = `${tc.args.path}:${tc.args.start_line || 0}`;
+          if (readFilesThisTurn.has(cacheKey)) {
+            console.log(`  ↩ read_file cache hit: ${tc.args.path} (already read this turn)`);
+            toolResult = readFilesThisTurn.get(cacheKey);
+          } else {
+            toolResult = await agentTools.executeTool(tc.name, tc.args);
+            readFilesThisTurn.set(cacheKey, toolResult);
+          }
+        } else {
+          toolResult = await agentTools.executeTool(tc.name, tc.args);
+        }
         const trimmed = (toolResult || '').length > 12000
           ? (toolResult || '').substring(0, 12000) + '\n...(truncated — file has more content)'
           : toolResult || '';
