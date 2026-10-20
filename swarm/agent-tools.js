@@ -83,25 +83,36 @@ export class AgentTools {
       const content = Buffer.from(data.content, 'base64').toString('utf-8');
       
       if (!content.includes(oldString)) {
-        // Provide diagnostic help
         const lines = content.split('\n');
         const searchWords = oldString.split(/\s+/).filter(w => w.length > 3);
         const matchingLines = [];
-        
         for (let i = 0; i < lines.length; i++) {
           if (searchWords.some(w => lines[i].includes(w))) {
             matchingLines.push(`Line ${i+1}: ${lines[i].substring(0, 120)}`);
           }
         }
-        
         const diagnostic = matchingLines.length > 0 
           ? `\n\nPossible lines:\n${matchingLines.slice(0, 3).join('\n')}`
           : '\n\nHint: Read the file again and copy the EXACT text (including whitespace and newlines).';
-        
         return `❌ old_string not found in ${filePath}.${diagnostic}`;
       }
       
-      const updated = content.replace(oldString, newString);
+      let updated = content.replace(oldString, newString);
+
+      // Auto-fix duplicate imports — the most common patch side-effect
+      if (filePath.match(/\.(ts|tsx|js|jsx)$/)) {
+        const lines = updated.split('\n');
+        const seenImports = new Set();
+        const deduped = lines.filter(line => {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('import ')) return true;
+          if (seenImports.has(trimmed)) return false;
+          seenImports.add(trimmed);
+          return true;
+        });
+        updated = deduped.join('\n');
+      }
+
       await this.githubPut(filePath, updated, `AI: patch ${filePath}`, data.sha);
       return `✅ Patched and pushed to GitHub: ${filePath}`;
     } catch (err) {
