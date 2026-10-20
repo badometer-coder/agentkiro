@@ -1736,8 +1736,10 @@ NEVER say "Done" or "Task complete" without listing the specific files and chang
 - Coding tasks → use read_file first, then write_file or patch.
 - Verification → use read_file on the relevant file, answer from what you see.
 
-# Parallel tool calls
-Batch independent reads into one response — don't do one read per turn when you need multiple files.
+# Parallel tool calls — MANDATORY
+You MUST batch all reads into a single round. On your FIRST tool call, read ALL files you need at once — never read one file per turn.
+Example: if you need HomeScreen.tsx AND ThemeContext.tsx, call read_file for BOTH in the same response.
+Then on round 2, write the changes. A task should never take more than 3 rounds: read all → write → done.
 
 # Tool rules
 - Use read_file to check the codebase. NEVER use web_search to check the repo.
@@ -1746,6 +1748,7 @@ Batch independent reads into one response — don't do one read per turn when yo
 - After read_file shows "[File has X lines. Use start_line=N to read more]" — call read_file again with that start_line. Never re-read from 0.${skillsContext}`;
 
     // Tool schemas for native function calling
+    // NOTE: The LLM should batch multiple read_file calls in a single round
     const toolSchemas = [
       {
         name: 'read_file',
@@ -1836,46 +1839,40 @@ Batch independent reads into one response — don't do one read per turn when yo
       // Add assistant message with tool calls to conversation
       messages.push({ role: 'assistant', content: result.text || '', tool_calls: result.raw?.tool_calls });
 
-      // Execute each tool call
-      for (const tc of result.toolCalls) {
+      // Execute tool calls in parallel (Hermes pattern — cuts multi-file tasks from 6 rounds to 2)
+      const toolPromises = result.toolCalls.map(async (tc) => {
         console.log(`  → ${tc.name}(${JSON.stringify(tc.args).substring(0, 100)})`);
-
         selfImprovementEngine.logToolCall({ toolName: tc.name, input: tc.args, timestamp: Date.now() });
 
-        // Hermes-style read tracking: return cached content if already read this turn
         let toolResult;
         if (tc.name === 'read_file' && tc.args?.path) {
           const cacheKey = `${tc.args.path}:${tc.args.start_line || 0}`;
           if (readFilesThisTurn.has(cacheKey)) {
-            console.log(`  ↩ read_file cache hit: ${tc.args.path} — telling model to proceed`);
+            console.log(`  ↩ cache hit: ${tc.args.path}`);
             toolResult = `[Already read this turn] ${readFilesThisTurn.get(cacheKey)}`;
           } else {
             toolResult = await agentTools.executeTool(tc.name, tc.args);
-            if (!toolResult.startsWith('❌')) {
-              readFilesThisTurn.set(cacheKey, toolResult);
-            }
+            if (!(toolResult || '').startsWith('❌')) readFilesThisTurn.set(cacheKey, toolResult);
           }
         } else {
           toolResult = await agentTools.executeTool(tc.name, tc.args);
-          // Invalidate cache for any file that was just written/patched
           if ((tc.name === 'write_file' || tc.name === 'patch') && tc.args?.path) {
             for (const key of readFilesThisTurn.keys()) {
               if (key.startsWith(tc.args.path + ':')) readFilesThisTurn.delete(key);
             }
           }
         }
+
         const trimmed = (toolResult || '').length > 12000
-          ? (toolResult || '').substring(0, 12000) + '\n...(truncated — file has more content)'
+          ? (toolResult || '').substring(0, 12000) + '\n...(truncated)'
           : toolResult || '';
+        console.log(`  [result] ${trimmed.substring(0, 150)}...`);
+        return { tc, trimmed };
+      });
 
-        console.log(`  [tool result] ${trimmed.substring(0, 200)}...`);
-
-        // Add tool result to messages (OpenAI format)
-        messages.push({
-          role: 'tool',
-          tool_call_id: tc.id || tc.name,
-          content: trimmed,
-        });
+      const toolResults = await Promise.all(toolPromises);
+      for (const { tc, trimmed } of toolResults) {
+        messages.push({ role: 'tool', tool_call_id: tc.id || tc.name, content: trimmed });
       }
 
       // Trim old tool results to stay under token limits (keep system + last 6 messages)
