@@ -1448,6 +1448,13 @@ bot.on('text', async (ctx) => {
     if (raw.startsWith('/')) return;
     console.log(`\n💬 User: "${raw}"`);
 
+    // Show typing indicator immediately so user knows the agent is working
+    await ctx.sendChatAction('typing');
+    // Keep refreshing typing indicator every 4 seconds during long tasks
+    const typingInterval = setInterval(() => {
+      ctx.sendChatAction('typing').catch(() => {});
+    }, 4000);
+
     // --- STOP / ABORT ---
     if (msg.match(/^(stop|abort|cancel|halt|kill|enough|just stop|stop it|stop now)/i)) {
       stopRequested = true;
@@ -1985,6 +1992,8 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
   } catch (error) {
     console.error('❌ Error:', error.message);
     ctx.reply(`Error: ${error.message}`).catch(() => {});
+  } finally {
+    clearInterval(typingInterval);
   }
 });
 
