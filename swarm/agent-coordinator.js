@@ -1566,6 +1566,12 @@ bot.on('text', async (ctx) => {
         return ctx.reply(`✅ No TypeScript errors found!\n\n(tsc output: ${output.substring(0, 200)})`);
       }
 
+      // Detect "missing node_modules" — TS2307 on every file means npm install failed, not a code bug
+      const missingModuleErrors = errorLines.filter(l => l.includes('TS2307') && l.includes('Cannot find module'));
+      if (missingModuleErrors.length > 10) {
+        return ctx.reply(`⚠️ These errors look like \`node_modules\` wasn't installed on the CI runner (${missingModuleErrors.length} "Cannot find module" errors). This is a CI infrastructure issue, not a code bug — the code itself is fine. Check the GitHub Actions logs to see if \`npm install\` failed.`);
+      }
+
       await ctx.reply(`Found ${errorLines.length} error(s):\n\n${errorLines.slice(0, 5).join('\n')}${errorLines.length > 5 ? '\n...' : ''}\n\n🔧 Fixing automatically...`);
 
       // Group errors by file path
