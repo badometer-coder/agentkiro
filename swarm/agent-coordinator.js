@@ -1735,9 +1735,8 @@ You MUST use your tools to take action — not describe what you would do. When 
 Every response must either (a) contain tool calls making progress, or (b) deliver a final result. Intentions without action are not acceptable.
 
 # Finishing the job
-A task is ONLY complete when the code is written AND committed to GitHub. "Done" means the file is patched/written and the ✅ from GitHub is confirmed.
+A task is ONLY complete when the code is written AND committed to GitHub. After every write_file or patch, run run_tsc to verify the code compiles. If there are errors, fix them before declaring done.
 After completing, always tell the user: what file(s) you changed, what exactly you added/modified, and that it's been pushed.
-NEVER say "Done" or "Task complete" without listing the specific files and changes made.
 
 # Feature implementation rules
 - "Add a toggle" = add a Switch/TouchableOpacity component to the UI file, not just change colors.
@@ -1804,6 +1803,11 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
           },
           required: ['path', 'old_string', 'new_string'],
         },
+      },
+      {
+        name: 'run_tsc',
+        description: 'Run TypeScript compiler on the app to check for errors. Use after making changes to verify the code compiles, or when the user pastes build errors.',
+        parameters: { type: 'object', properties: {} },
       },
       {
         name: 'web_search',

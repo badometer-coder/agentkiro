@@ -138,7 +138,26 @@ export class AgentTools {
     }
   }
 
-  getTime() { return new Date().toLocaleTimeString('en-US'); }
+  async runTsc() {
+    try {
+      const appPath = this.env.PROJECT_PATH || '/opt/render/project/proximity-app';
+      const { execSync } = await import('child_process');
+      // Pull latest first so we check current code
+      try { execSync(`git -C "${appPath}" pull origin main`, { stdio: 'pipe', timeout: 30000 }); } catch (_) {}
+      const output = execSync(
+        `cd "${appPath}" && npx tsc --noEmit --skipLibCheck 2>&1 | head -50`,
+        { encoding: 'utf-8', stdio: 'pipe', timeout: 60000 }
+      );
+      const errors = (output || '').split('\n').filter(l => l.includes('error TS'));
+      if (errors.length === 0) return '✅ No TypeScript errors — code compiles clean.';
+      return `❌ ${errors.length} TypeScript error(s):\n${errors.slice(0, 20).join('\n')}`;
+    } catch (err) {
+      const output = err.stdout || err.message || '';
+      const errors = output.split('\n').filter(l => l.includes('error TS'));
+      if (errors.length > 0) return `❌ ${errors.length} TypeScript error(s):\n${errors.slice(0, 20).join('\n')}`;
+      return `❌ tsc failed: ${output.substring(0, 500)}`;
+    }
+  }
   getDate() { return new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }); }
   getMemoryStats() {
     try { return JSON.stringify(this.memory.getStats(), null, 2); }
@@ -168,6 +187,10 @@ export class AgentTools {
       remember: {
         description: 'Save a learning to memory.',
         execute: async (p) => this.remember(p.type, p.content),
+      },
+      run_tsc: {
+        description: 'Run TypeScript compiler check on the proximity app. Use this to verify your changes compile before declaring done, or to check what errors exist.',
+        execute: async () => this.runTsc(),
       },
       get_time:     { execute: async () => this.getTime() },
       get_date:     { execute: async () => this.getDate() },
