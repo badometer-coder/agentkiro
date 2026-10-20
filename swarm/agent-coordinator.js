@@ -1772,6 +1772,8 @@ For conversational questions, answer directly without tools.${skillsContext}`;
     let finalReply = '';
     const MAX_ROUNDS = 10;
     let round = 0;
+    let lastToolCallJson = '';
+    let toolStuckCount = 0;
 
     while (round < MAX_ROUNDS) {
       const result = await llmProvider.callLLMWithTools(messages, toolSchemas, { temperature: 0.3 });
@@ -1783,6 +1785,18 @@ For conversational questions, answer directly without tools.${skillsContext}`;
       }
 
       console.log(`🔧 Round ${round + 1}: ${result.toolCalls.length} tool call(s)`);
+
+      // Check if agent is stuck (calling same tool with same params)
+      const toolCallJson = JSON.stringify(result.toolCalls.map(tc => ({ name: tc.name, args: tc.args })));
+      if (toolCallJson === lastToolCallJson) {
+        toolStuckCount++;
+        console.log(`⚠️  Agent stuck in loop (same tool call ${toolStuckCount}x) — bailing out`);
+        finalReply = `⚠️ I got stuck trying to ${result.toolCalls[0].name}. The operation failed repeatedly. Please check the logs or try a different approach.`;
+        break;
+      } else {
+        toolStuckCount = 0;
+        lastToolCallJson = toolCallJson;
+      }
 
       // Add assistant message with tool calls to conversation
       messages.push({ role: 'assistant', content: result.text || '', tool_calls: result.raw?.tool_calls });
@@ -1798,7 +1812,7 @@ For conversational questions, answer directly without tools.${skillsContext}`;
           ? (toolResult || '').substring(0, 3000) + '\n...(truncated)'
           : toolResult || '';
 
-        console.log(`  ← ${tc.name} result: ${trimmed.substring(0, 80)}...`);
+        console.log(`  [tool result] ${trimmed.substring(0, 200)}...`);
 
         // Add tool result to messages (OpenAI format)
         messages.push({
