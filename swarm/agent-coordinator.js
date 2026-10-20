@@ -1751,12 +1751,13 @@ OTHER TOOLS:
 - memory_stats {} → Memory stats
 
 RULES:
-- "what day is it?" → Answer directly using TODAY above
-- Simple questions (what is X, tell me about X, check about X) → Answer directly, NO tools needed
+- Simple questions (what is X, tell me about X, check about X, how is X going) → Answer directly from your knowledge/context. DO NOT call any tools.
+- "what day is it?" → Answer directly using TODAY above. NO tools.
+- Only use tools when you need to READ/WRITE files or RUN commands for actual coding work.
 - For coding tasks: ALWAYS read_file first, then patch. Never blindly rewrite.
 - Call ONE tool per response. Wait for the result before calling the next.
 - DO NOT use web_search for questions you can answer from context or memory.
-- DO NOT say you lack access to anything — use your tools.
+- NEVER show [TOOL: ...] in your reply to the user — tools are silent internal actions.
 - Be direct and conversational.${skillsContext}`,
       },
       ...conversationHistory,
@@ -1832,9 +1833,12 @@ Remember: [TOOL: tool_name {"param": "value"}] format for tool calls.`,
       round++;
     }
 
-    // Remove tool call tags from the final reply shown to user
-    const cleanToolReply = finalReply.replace(/\[TOOL:\s*\w+\s*{[^}]*}\]/g, '').trim();
-    finalReply = cleanToolReply || finalReply;
+    // Remove tool call tags from the final reply shown to user (strip any format)
+    const cleanToolReply = finalReply
+      .replace(/\[TOOL:\s*\w+\s*\{[\s\S]*?\}\]/g, '')   // [TOOL: name {...}]
+      .replace(/\[TOOL:\s*\w+[^\]]*\]/g, '')              // [TOOL: name ...]
+      .trim();
+    finalReply = cleanToolReply || 'Done.';  // never show raw tool calls to user
 
     // Store the FINAL reply (not the tool call) in conversation history
     conversationHistory.push({ role: 'assistant', content: finalReply });
