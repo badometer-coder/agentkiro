@@ -91,9 +91,12 @@ class SelfImprovementEngine {
     if (numCalls < 5) return false;
     if (!success) return false;
 
-    // Check tool variety (at least 3 different tool types)
+    // Check tool variety (at least 2 different tool types)
     const uniqueTools = new Set(this.sessionLog.map(c => c.tool));
-    if (uniqueTools.size < 2) return false;
+    if (uniqueTools.size < 2) {
+      console.log(`   (Skill skipped: only ${uniqueTools.size} unique tool type(s): ${[...uniqueTools].join(', ')})`);
+      return false;
+    }
 
     return true;
   }

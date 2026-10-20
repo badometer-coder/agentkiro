@@ -1752,8 +1752,10 @@ OTHER TOOLS:
 
 RULES:
 - "what day is it?" → Answer directly using TODAY above
+- Simple questions (what is X, tell me about X, check about X) → Answer directly, NO tools needed
 - For coding tasks: ALWAYS read_file first, then patch. Never blindly rewrite.
 - Call ONE tool per response. Wait for the result before calling the next.
+- DO NOT use web_search for questions you can answer from context or memory.
 - DO NOT say you lack access to anything — use your tools.
 - Be direct and conversational.${skillsContext}`,
       },
@@ -1764,7 +1766,7 @@ RULES:
 
     // === TOOL LOOP (Hermes-style) — allow multiple rounds of tool calls ===
     let finalReply = llmReply;
-    const MAX_TOOL_ROUNDS = 10; // prevent infinite loops
+    const MAX_TOOL_ROUNDS = 5; // reduced from 10 — conversational tasks need fewer rounds
     let round = 0;
 
     while (round < MAX_TOOL_ROUNDS) {
