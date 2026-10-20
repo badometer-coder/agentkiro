@@ -55,6 +55,10 @@ class MultiLLMProvider {
 
   getCurrentProvider() { return this.providers[this.currentProviderIndex]; }
 
+  resetToFirst() {
+    this.currentProviderIndex = 0;
+  }
+
   rotateProvider() {
     this.currentProviderIndex = (this.currentProviderIndex + 1) % this.providers.length;
     console.log(`🔄 Rotating to: ${this.getCurrentProvider().name}`);

@@ -1805,6 +1805,9 @@ Batch independent reads into one response — don't do one read per turn when yo
     let toolStuckCount = 0;
     const readFilesThisTurn = new Map(); // track file reads — avoid redundant re-reads
 
+    // Always start from the best provider (Gemini) — don't inherit rotation state from previous turn
+    llmProvider.resetToFirst();
+
     while (round < MAX_ROUNDS) {
       const result = await llmProvider.callLLMWithTools(messages, toolSchemas, { temperature: 0.3 });
 
