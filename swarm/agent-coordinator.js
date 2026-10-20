@@ -1602,7 +1602,7 @@ ${fileErrors}`;
 
     // Add to conversation history for context
     conversationHistory.push({ role: 'user', content: raw });
-    if (conversationHistory.length > 10) conversationHistory = conversationHistory.slice(-10);
+    if (conversationHistory.length > 30) conversationHistory = conversationHistory.slice(-30);
 
     // Inject current date into system prompt — use local server timezone, not UTC
     const serverDate = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -1611,88 +1611,107 @@ ${fileErrors}`;
     const llmReply = await llmProvider.callLLM([
       {
         role: 'system',
-        content: `You are Fag, a smart conversational AI assistant with web search capability.
+        content: `You are Fag, a smart conversational AI agent with coding, web search, and memory capabilities.
 
-📅 TODAY: ${serverDate} — ${serverTime} (East Africa Time)
+📅 TODAY: ${serverDate} — ${serverTime}
 
-🔧 YOU HAVE TOOLS. Use this format when needed:
+🔧 YOU HAVE TOOLS. Call them using this format in your response:
 [TOOL: tool_name {"param": "value"}]
 
-AVAILABLE TOOLS:
+CODING TOOLS (use these to build features):
+- read_file {"path": "src/file.tsx"} → Read a file (with line numbers). ALWAYS read before editing.
+- write_file {"path": "src/file.tsx", "content": "..."} → Create or overwrite a file
+- patch {"path": "src/file.tsx", "old_string": "...", "new_string": "..."} → Targeted edit (preferred over write_file for existing files)
+- terminal {"command": "npm test"} → Run shell command (tests, git, etc.)
+
+WORKFLOW for coding tasks:
+1. read_file to see the current code
+2. patch to make targeted changes (or write_file for new files)
+3. terminal to run tests / check for errors
+4. If errors, read the file again and patch to fix
+
+OTHER TOOLS:
 - get_time {} → Current time
-- get_date {} → Current date  
-- web_search {"query": "..."} → Search web for current news, docs, info
+- get_date {} → Current date
+- web_search {"query": "..."} → Search web for docs, news, solutions
+- remember {"type": "pattern|insight", "content": "..."} → Save a learning
 - memory_stats {} → Memory stats
-- remember {"type": "pattern|solution|insight", "content": "..."} → Save learning
 
 RULES:
-- "what day is it?" / "what's today?" → Answer directly using TODAY above — do NOT guess
-- "what time is it?" → Answer directly using TODAY above — do NOT guess
-- news/current events/recent demos → [TOOL: web_search {"query": "..."}]
-- coding tasks for Proximity app → [DOTASK: description]
-- DO NOT say you lack access to real-time info — you have the date/time above
-- NEVER say "I don't have access to real-time info" — either search or answer from knowledge
-- If search returns nothing useful, answer from your own training knowledge
-- Be direct, conversational, under 80 words`,
+- "what day is it?" → Answer directly using TODAY above
+- For coding tasks: ALWAYS read_file first, then patch. Never blindly rewrite.
+- Call ONE tool per response. Wait for the result before calling the next.
+- DO NOT say you lack access to anything — use your tools.
+- Be direct and conversational.`,
       },
       ...conversationHistory,
     ], { temperature: 0.3, max_tokens: 200 });
 
-    // DEBUG: log what the LLM actually said (helps diagnose tool call issues)
     console.log(`🤖 LLM raw reply: "${llmReply.substring(0, 200)}"`);
 
-    // === EXECUTE TOOLS if LLM requested any ===
+    // === TOOL LOOP (Hermes-style) — allow multiple rounds of tool calls ===
     let finalReply = llmReply;
-    const toolCalls = [...llmReply.matchAll(/\[TOOL:\s*(\w+)\s*({[^}]*})\]/g)];
-    
-    if (toolCalls.length > 0) {
-      console.log(`🔧 Executing ${toolCalls.length} tool(s)...`);
+    const MAX_TOOL_ROUNDS = 10; // prevent infinite loops
+    let round = 0;
+
+    while (round < MAX_TOOL_ROUNDS) {
+      const toolCalls = [...finalReply.matchAll(/\[TOOL:\s*(\w+)\s*({[^}]*})\]/g)];
+
+      if (toolCalls.length === 0) break; // no more tool calls — we have the final answer
+
+      console.log(`🔧 Round ${round + 1}: executing ${toolCalls.length} tool(s)...`);
+
+      // Execute all tools in this round
       let toolResults = '';
-      
       for (const match of toolCalls) {
         try {
           const toolName = match[1];
           const params = JSON.parse(match[2]);
-          console.log(`  Tool: ${toolName}(${JSON.stringify(params)})`);
-          
+          console.log(`  Tool: ${toolName}(${JSON.stringify(params).substring(0, 100)})`);
           const result = await agentTools.executeTool(toolName, params);
-          toolResults += `\n✓ ${toolName}: ${result}\n`;
+          // Truncate long results (file contents can be huge)
+          const trimmed = (result || '').length > 3000
+            ? (result || '').substring(0, 3000) + '\n... (truncated)'
+            : result || '';
+          toolResults += `\n[Tool: ${toolName}]\n${trimmed}\n`;
         } catch (e) {
           console.log(`  Tool error: ${e.message}`);
-          toolResults += `\n✗ Error: ${e.message}\n`;
+          toolResults += `\n[Tool: ${toolName}] Error: ${e.message}\n`;
         }
       }
-      
-      if (toolResults) {
-        const hasUsefulResults = toolResults.trim().length > 30
-          && !toolResults.includes('No results found')
-          && !toolResults.includes('Search failed')
-          && !toolResults.includes('fetch failed')
-          && !toolResults.includes('Could not fetch');
 
-        const toolContext = [
-          {
-            role: 'system',
-            content: `You are Fag, a smart conversational AI assistant. Answer the user's question directly and concisely. Today: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`,
-          },
-          // Include conversation history BEFORE the tool call (excludes the [TOOL:...] turn)
-          ...conversationHistory.slice(-6),
-          {
-            role: 'user',
-            content: hasUsefulResults
-              ? `[Tool results for "${raw}"]:${toolResults}\nAnswer the user's question using these results. Be direct.`
-              : `[Web search returned no useful results for "${raw}"]\nAnswer using your own knowledge. Be direct and helpful.`
-          }
-        ];
-        
-        try {
-          finalReply = await llmProvider.callLLM(toolContext, { temperature: 0.3, max_tokens: 300 });
-        } catch (e) {
-          console.log(`  Failed to get final response: ${e.message}`);
-          finalReply = hasUsefulResults ? toolResults : `I couldn't find current info on that.`;
-        }
+      // Feed tool results back to LLM — it may call more tools or give final answer
+      const toolContext = [
+        {
+          role: 'system',
+          content: `You are Fag, a smart conversational AI agent with coding tools. Today: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.
+
+You just called tools. Based on the results, either:
+- Call another tool (e.g. patch to fix an error, read_file to check another file)
+- Or give your final answer to the user (no tool call, just text).
+
+Remember: [TOOL: tool_name {"param": "value"}] format for tool calls.`,
+        },
+        ...conversationHistory.slice(-12),
+        { role: 'assistant', content: finalReply },
+        { role: 'user', content: `Tool results:\n${toolResults}\nContinue. Either call the next tool or give the final answer.` },
+      ];
+
+      try {
+        finalReply = await llmProvider.callLLM(toolContext, { temperature: 0.3, max_tokens: 400 });
+        console.log(`🤖 Round ${round + 1} reply: "${finalReply.substring(0, 200)}"`);
+      } catch (e) {
+        console.log(`  LLM call failed: ${e.message}`);
+        finalReply = `Tool results:\n${toolResults}`;
+        break;
       }
+
+      round++;
     }
+
+    // Remove tool call tags from the final reply shown to user
+    const cleanToolReply = finalReply.replace(/\[TOOL:\s*\w+\s*{[^}]*}\]/g, '').trim();
+    finalReply = cleanToolReply || finalReply;
 
     // Store the FINAL reply (not the tool call) in conversation history
     conversationHistory.push({ role: 'assistant', content: finalReply });
