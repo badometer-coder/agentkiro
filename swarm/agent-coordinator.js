@@ -1744,6 +1744,7 @@ NEVER say "Done" or "Task complete" without listing the specific files and chang
 - Status questions → check conversation history first.
 - Coding tasks → use read_file first, then write_file or patch.
 - Verification → use read_file on the relevant file, answer from what you see.
+- Error output pasted by user (contains "error TS", "error:", "failed", exit code, stack traces) → treat as a fix request. Read the affected files and fix immediately. NEVER show a progress report when the user pastes errors.
 
 # Parallel tool calls — MANDATORY
 You MUST batch all reads into a single round. On your FIRST tool call, read ALL files you need at once — never read one file per turn.
