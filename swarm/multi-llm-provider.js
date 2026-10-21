@@ -118,7 +118,7 @@ class MultiLLMProvider {
   async _callProvider(provider, messages, options) {
     if (provider.type === 'groq' || provider.type === 'openai') {
       const res = await provider.client.chat.completions.create({
-        model: provider.type === 'groq' ? 'llama-3.3-70b-versatile' : 'gpt-4o-mini',
+        model: provider.type === 'groq' ? 'qwen/qwen3.8-27b' : 'gpt-4o-mini',
         messages,
         temperature: options.temperature ?? 0.3,
         max_tokens: options.max_tokens || 1000,
@@ -133,7 +133,7 @@ class MultiLLMProvider {
         parts: [{ text: m.content }],
       }));
       const model = provider.client.getGenerativeModel({
-        model: 'gemini-2.0-flash',
+        model: 'gemini-3.8-flash',
         generationConfig: { maxOutputTokens: 8192, temperature: options.temperature ?? 0.3 },
         ...(systemPrompt ? { systemInstruction: { parts: [{ text: systemPrompt }] } } : {}),
       });
@@ -155,7 +155,7 @@ class MultiLLMProvider {
 
     if (provider.type === 'groq' || provider.type === 'openai') {
       const res = await provider.client.chat.completions.create({
-        model: provider.type === 'groq' ? 'llama-3.3-70b-versatile' : 'gpt-4o-mini',
+        model: provider.type === 'groq' ? 'qwen/qwen3.8-27b' : 'gpt-4o-mini',
         messages,
         tools,
         tool_choice: 'auto',
@@ -188,7 +188,7 @@ class MultiLLMProvider {
       }));
 
       const model = provider.client.getGenerativeModel({
-        model: 'gemini-2.0-flash',
+        model: 'gemini-3.8-flash',
         generationConfig: { maxOutputTokens: 8192, temperature: options.temperature ?? 0.3 },
         tools: [{ functionDeclarations }],
         ...(systemPrompt ? { systemInstruction: { parts: [{ text: systemPrompt }] } } : {}),
