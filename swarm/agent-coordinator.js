@@ -122,8 +122,16 @@ function loadConversationHistory() {
     if (fs.existsSync(conversationFile)) {
       const data = JSON.parse(fs.readFileSync(conversationFile, 'utf-8'));
       if (Array.isArray(data) && data.length > 0) {
-        console.log(`📜 Loaded ${data.length} conversation entries from disk`);
-        return data.slice(-30); // keep last 30
+        // Filter out error/stuck messages — they poison the LLM context
+        const cleaned = data.filter(m => {
+          const content = m.content || '';
+          return !content.includes('⚠️ I got stuck') && !content.includes('The file may be truncated');
+        });
+        if (cleaned.length < data.length) {
+          console.log(`🧹 Filtered ${data.length - cleaned.length} error messages from history`);
+        }
+        console.log(`📜 Loaded ${cleaned.length} conversation entries from disk`);
+        return cleaned.slice(-6); // keep last 6 (was 30 — too many tokens)
       }
     }
   } catch (e) {
@@ -136,7 +144,12 @@ function saveConversationHistory() {
   try {
     const dir = path.dirname(conversationFile);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(conversationFile, JSON.stringify(conversationHistory.slice(-30)), 'utf-8');
+    // Don't save error/stuck messages — they poison future tasks
+    const cleaned = conversationHistory.filter(m => {
+      const content = m.content || '';
+      return !content.includes('⚠️ I got stuck') && !content.includes('The file may be truncated');
+    });
+    fs.writeFileSync(conversationFile, JSON.stringify(cleaned.slice(-6)), 'utf-8');
   } catch (e) {
     console.log(`⚠️ Could not save conversation history: ${e.message}`);
   }
@@ -1808,6 +1821,8 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
 - Use write_file or patch to implement. Always read_file first.
 - PREFER patch over write_file for existing files — patch sends only the changed text, write_file sends the ENTIRE file (can exceed token limits).
 - Only use write_file for NEW files or files that are truncated/broken.
+- After reading a file, IMMEDIATELY use patch or write_file to make the change. Do NOT read the same file twice in one task.
+- If read_file returns "[End of file]" or "[Already read this turn]", STOP reading and use patch or write_file.
 - web_search ONLY for external docs, never repo content.
 - After read_file shows "[File has X lines. Use start_line=N to read more]" — call read_file again with that start_line. Never re-read from 0.
 - NEVER duplicate imports. When adding imports to a file, check what's already imported and only add what's missing. If using write_file, include ALL existing imports exactly once.${skillsContext}`;
@@ -1899,7 +1914,7 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
         toolStuckCount++;
         if (toolStuckCount >= 3) {
           console.log(`⚠️  Agent stuck in loop (same tool+path ${toolStuckCount}x) — bailing out`);
-          finalReply = `⚠️ I got stuck on ${result.toolCalls[0].name}("${result.toolCalls[0].args?.path || result.toolCalls[0].args?.query || ''}"). The file may be truncated — try asking me to rewrite it completely.`;
+          finalReply = `⚠️ I got stuck trying to ${result.toolCalls[0].name}("${result.toolCalls[0].args?.path || result.toolCalls[0].args?.query || ''}"). Please try rephrasing your request or be more specific about what to change.`;
           break;
         }
       } else {
