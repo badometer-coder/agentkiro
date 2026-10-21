@@ -14,6 +14,7 @@ class MultiLLMProvider {
     this.providers = [];
     this.currentProviderIndex = 0;
     this.notifyCallback = notifyCallback;
+    this.deadProviders = new Set(); // providers that hit daily quota — skip entirely
     this.initializeProviders();
   }
 
@@ -56,12 +57,42 @@ class MultiLLMProvider {
   getCurrentProvider() { return this.providers[this.currentProviderIndex]; }
 
   resetToFirst() {
+    // Reset to first ALIVE provider, not just index 0
     this.currentProviderIndex = 0;
+    this._skipDeadProviders();
   }
 
   rotateProvider() {
     this.currentProviderIndex = (this.currentProviderIndex + 1) % this.providers.length;
-    console.log(`🔄 Rotating to: ${this.getCurrentProvider().name}`);
+    this._skipDeadProviders();
+    if (!this.deadProviders.has(this.currentProviderIndex)) {
+      console.log(`🔄 Rotating to: ${this.getCurrentProvider().name}`);
+    }
+  }
+
+  _skipDeadProviders() {
+    let attempts = 0;
+    while (this.deadProviders.has(this.currentProviderIndex) && attempts < this.providers.length) {
+      this.currentProviderIndex = (this.currentProviderIndex + 1) % this.providers.length;
+      attempts++;
+    }
+  }
+
+  _markDead(providerIndex, reason) {
+    if (!this.deadProviders.has(providerIndex)) {
+      this.deadProviders.add(providerIndex);
+      const provider = this.providers[providerIndex];
+      console.log(`💀 ${provider.name} marked dead: ${reason}`);
+    }
+  }
+
+  _isDailyLimitError(err) {
+    const msg = err.message || '';
+    // Daily quota: "retry in Xh", "TPD" (tokens per day), "quota exceeded"
+    return msg.includes('retry in') && msg.includes('h') ||
+           msg.includes('TPD') ||
+           msg.includes('quota') && msg.includes('PerDay') ||
+           msg.includes('PerDayPerProjectPerModel');
   }
 
   /**
@@ -70,9 +101,11 @@ class MultiLLMProvider {
   async callLLM(messages, options = {}) {
     let attempts = 0;
     let lastError = null;
+    const aliveCount = this.providers.length - this.deadProviders.size;
 
-    while (attempts < this.providers.length) {
+    while (attempts < aliveCount) {
       const provider = this.getCurrentProvider();
+      const providerIdx = this.currentProviderIndex;
       attempts++;
       try {
         console.log(`📞 Calling ${provider.name}... (timeout: ${(options.timeout || 30000) / 1000}s)`);
@@ -82,10 +115,13 @@ class MultiLLMProvider {
       } catch (err) {
         lastError = err;
         console.error(`❌ ${provider.name} failed: ${err.message}`);
-        if (attempts < this.providers.length) this.rotateProvider();
+        if (this._isDailyLimitError(err)) {
+          this._markDead(providerIdx, 'daily quota exceeded');
+        }
+        if (attempts < aliveCount) this.rotateProvider();
       }
     }
-    throw new Error(`All providers failed. Last: ${lastError?.message}`);
+    throw new Error(`All providers failed (${this.deadProviders.size} dead). Last: ${lastError?.message}`);
   }
 
   /**
@@ -95,12 +131,13 @@ class MultiLLMProvider {
    * Returns: { text: string, toolCalls: [{name, args}] }
    */
   async callLLMWithTools(messages, toolSchemas, options = {}) {
-    const startIndex = this.currentProviderIndex;
     let attempts = 0;
     let lastError = null;
+    const aliveCount = this.providers.length - this.deadProviders.size;
 
-    while (attempts < this.providers.length) {
+    while (attempts < aliveCount) {
       const provider = this.getCurrentProvider();
+      const providerIdx = this.currentProviderIndex;
       attempts++;
       try {
         console.log(`📞 Calling ${provider.name} with tools... (${toolSchemas.length} tools)`);
@@ -110,10 +147,14 @@ class MultiLLMProvider {
       } catch (err) {
         lastError = err;
         console.error(`❌ ${provider.name} failed: ${err.message}`);
-        if (attempts < this.providers.length) this.rotateProvider();
+        // Mark as dead if daily quota exceeded — skip for rest of session
+        if (this._isDailyLimitError(err)) {
+          this._markDead(providerIdx, 'daily quota exceeded');
+        }
+        if (attempts < aliveCount) this.rotateProvider();
       }
     }
-    throw new Error(`All providers failed. Last: ${lastError?.message}`);
+    throw new Error(`All providers failed (${this.deadProviders.size} dead). Last: ${lastError?.message}`);
   }
 
   async _callProvider(provider, messages, options) {
@@ -219,7 +260,9 @@ class MultiLLMProvider {
     return {
       totalProviders: this.providers.length,
       currentProvider: this.getCurrentProvider()?.name,
-      providers: this.providers.map(p => p.name),
+      deadProviders: Array.from(this.deadProviders).map(i => this.providers[i]?.name).filter(Boolean),
+      aliveProviders: this.providers.length - this.deadProviders.size,
+      providers: this.providers.map((p, i) => `${p.name}${this.deadProviders.has(i) ? ' (DEAD)' : ''}`),
     };
   }
 }
