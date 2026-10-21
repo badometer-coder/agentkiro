@@ -1932,6 +1932,7 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
       }
 
       round++;
+    } // end while loop
 
     if (!finalReply) finalReply = 'Task complete. Check the app — changes have been pushed to GitHub.';
 
