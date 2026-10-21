@@ -2099,6 +2099,12 @@ async function startBot() {
     });
     console.log('✅ Telegram bot launched (polling mode)');
   } catch (error) {
+    if (error.message && error.message.includes('409')) {
+      console.error('❌ Bot conflict (409): Another instance is running');
+      console.error('   Gracefully exiting to allow new instance to take over...');
+      // Exit cleanly so Render can restart with only one instance
+      process.exit(0);
+    }
     console.error('❌ Failed to launch Telegram bot:', error.message);
     console.error('   Retrying in 15 seconds...');
     setTimeout(startBot, 15000);
@@ -2106,6 +2112,17 @@ async function startBot() {
 }
 
 startBot();
+
+// Handle graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('🛑 SIGTERM received — shutting down gracefully');
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.log('🛑 SIGINT received — shutting down gracefully');
+  process.exit(0);
+});
 
 // CI error notification — notifies via Telegram but does NOT auto-fix (prevents loops)
 // Track seen CI errors to prevent duplicate processing
