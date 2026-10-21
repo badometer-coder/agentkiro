@@ -1806,6 +1806,8 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
 # Tool rules
 - Use read_file to check the codebase. NEVER use web_search to check the repo.
 - Use write_file or patch to implement. Always read_file first.
+- PREFER patch over write_file for existing files — patch sends only the changed text, write_file sends the ENTIRE file (can exceed token limits).
+- Only use write_file for NEW files or files that are truncated/broken.
 - web_search ONLY for external docs, never repo content.
 - After read_file shows "[File has X lines. Use start_line=N to read more]" — call read_file again with that start_line. Never re-read from 0.
 - NEVER duplicate imports. When adding imports to a file, check what's already imported and only add what's missing. If using write_file, include ALL existing imports exactly once.${skillsContext}`;
