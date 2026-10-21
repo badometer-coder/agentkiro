@@ -2205,49 +2205,16 @@ process.on('SIGINT', () => {
   process.exit(0);
 });
 
-// CI error notification — notifies via Telegram but does NOT auto-fix (prevents loops)
-// Track seen CI errors to prevent duplicate processing
-let ciFixAttempts = 0;
-const MAX_CI_FIX_ATTEMPTS = 3;
-const seenCIErrors = new Set();
-
+// CI error notification — DISABLED (burns too many tokens with broken ProximityHeader.tsx)
+// TODO: Re-enable once ProximityHeader.tsx is fixed
 setCIErrorCallback(async (errorMessage) => {
-  const errorKey = errorMessage.substring(0, 100);
-  if (seenCIErrors.has(errorKey)) {
-    console.log(`🔄 CI Error already seen — skipping duplicate`);
-    return;
-  }
-  seenCIErrors.add(errorKey);
-  ciFixAttempts++;
-
-  if (ciFixAttempts > MAX_CI_FIX_ATTEMPTS) {
-    console.log(`⚠️ Max CI fix attempts (${MAX_CI_FIX_ATTEMPTS}) reached — notifying only`);
-    if (telegramBotContext) {
-      await telegramBotContext.telegram.sendMessage(
-        telegramBotContext.chat.id,
-        `🚨 CI failed again (attempt ${ciFixAttempts}). Manual review needed:\n\n${errorMessage.substring(0, 500)}`
-      ).catch(() => {});
-    }
-    return;
-  }
-
-  console.log(`🚨 CI Error received — auto-fixing (attempt ${ciFixAttempts}/${MAX_CI_FIX_ATTEMPTS})...`);
+  console.log(`🚨 CI Error received but auto-fix is DISABLED to conserve tokens`);
+  console.log(`   Error: ${errorMessage.substring(0, 100)}`);
   if (telegramBotContext) {
     await telegramBotContext.telegram.sendMessage(
       telegramBotContext.chat.id,
-      `🚨 CI failed — fixing automatically...\n\n${errorMessage.substring(0, 300)}`
+      `🚨 CI failed:\n\n${errorMessage.substring(0, 400)}\n\n⚠️ Auto-fix disabled — please fix manually via Telegram.`
     ).catch(() => {});
-  }
-
-  // Auto-fix: treat CI error as a task
-  const fixTask = `Fix these TypeScript/build errors from the CI pipeline:\n\n${errorMessage.substring(0, 1000)}`;
-  const fixResult = await executeTask(fixTask, telegramBotContext);
-  if (fixResult && telegramBotContext) {
-    await telegramBotContext.telegram.sendMessage(
-      telegramBotContext.chat.id,
-      `✅ CI auto-fix applied. Check GitHub Actions for the new build.`
-    ).catch(() => {});
-    ciFixAttempts = 0; // reset on success
   }
 });
 
