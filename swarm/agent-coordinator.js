@@ -765,6 +765,20 @@ OUTPUT: Modified file(s) only. Start each with "File: <path>" then the complete 
 
       const fullPath = path.join(appPath, cleanPath);
 
+      // Auto-fix: Replace SafeAreaView from 'react-native' with 'react-native-safe-area-context'
+      if (cleanPath.match(/\.(ts|tsx|js|jsx)$/)) {
+        code = code.replace(
+          /import\s+\{([^}]*)SafeAreaView([^}]*)\}\s+from\s+['"]react-native['"]/g,
+          (match, before, after) => {
+            const cleaned = (before + after).split(',').map(s => s.trim()).filter(s => s && s !== 'SafeAreaView');
+            return `import { ${cleaned.join(', ')} } from 'react-native'`;
+          }
+        );
+        if (code.includes('<SafeAreaView') && !code.includes("from 'react-native-safe-area-context'") && !code.includes('from "react-native-safe-area-context"')) {
+          code = "import { SafeAreaView } from 'react-native-safe-area-context';\n" + code;
+        }
+      }
+
       console.log(`💾 Saving to: ${fullPath}`);
       try {
         fs.mkdirSync(path.dirname(fullPath), { recursive: true });
