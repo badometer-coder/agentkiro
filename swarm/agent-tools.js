@@ -92,6 +92,14 @@ export class AgentTools {
         }
       }
       
+      // Check for truncated content — common sign of max_tokens being too low
+      if (filePath.match(/\.(ts|tsx|js|jsx)$/)) {
+        const lastLine = content.trim().split('\n').pop().trim();
+        if (lastLine && !lastLine.endsWith(';') && !lastLine.endsWith('}') && !lastLine.endsWith('>') && !lastLine.endsWith('*/') && !lastLine.endsWith(']')) {
+          console.log(`⚠️ File may be truncated — last line: "${lastLine.substring(0, 50)}"`);
+        }
+      }
+      
       await this.githubPut(filePath, content, message || `AI: update ${filePath}`, sha);
       return `✅ Written and pushed to GitHub: ${filePath}`;
     } catch (err) {
