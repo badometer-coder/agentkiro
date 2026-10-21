@@ -392,7 +392,8 @@ REQUIREMENTS:
 3. Start each file with "File: <path>" then the complete code
 4. Do NOT create or modify files that are not listed above
 5. Do NOT invent new imports — only use imports that already exist in the file
-6. NO markdown fences, NO explanations — ONLY corrected code.`,
+6. NO markdown fences, NO explanations — ONLY corrected code.
+7. NEVER use SafeAreaView from 'react-native' — it does nothing on Android. Use \`import { SafeAreaView } from 'react-native-safe-area-context'\` instead (already installed in this project).`,
       },
       {
         role: 'user',
@@ -646,6 +647,7 @@ IMPORT RULES — CRITICAL (violating these breaks the build):
 13. NEVER import from a module that doesn't exist. If you're unsure, check the CURRENT PROJECT FILES for the correct import path.
 14. React Native imports come from 'react-native' — NEVER from any other package name.
 15. Do NOT write comments like "// wait, react-native" or "// TODO" in the code. Output clean, final code only.
+16. NEVER use SafeAreaView from 'react-native' — it does NOTHING on Android and is deprecated. ALWAYS use \`import { SafeAreaView } from 'react-native-safe-area-context'\` (already installed). For status bar overlap, use \`useSafeAreaInsets()\` from the same package. This app runs on Android — Android-safe code is mandatory.
 
 ${TYPE_DEFINITIONS_CONTEXT}
 
@@ -1755,6 +1757,15 @@ After completing, always tell the user: what file(s) you changed, what exactly y
 - "Night/day mode" or "dark/light mode" = add a visible toggle button the user can tap, connected to ThemeContext toggle().
 - Always check ThemeContext.tsx first to understand the existing theme system before implementing.
 - The toggle must appear in the screen the user specified.
+
+# React Native safe area rules — CRITICAL
+- NEVER use SafeAreaView from 'react-native'. It is a no-op on Android and deprecated.
+- ALWAYS use SafeAreaView from 'react-native-safe-area-context'. It works on BOTH iOS and Android.
+- Import: \`import { SafeAreaView } from 'react-native-safe-area-context';\`
+- The app uses 'react-native-safe-area-context' (already installed).
+- For status bar overlap on Android, also use \`<StatusBar barStyle="..." />\` from 'expo-status-bar' and paddingTop from useSafeAreaInsets().
+- Example: \`import { useSafeAreaInsets } from 'react-native-safe-area-context'; const insets = useSafeAreaInsets(); <View style={{ paddingTop: insets.top }}>\`
+- This app runs on Android (package: com.daniprox.proximityappfinal). Android-safe fixes are mandatory.
 
 # When to use tools vs when to just reply
 - Short/vague messages ("?", "ok", "done?") → reply directly, NO tools.
