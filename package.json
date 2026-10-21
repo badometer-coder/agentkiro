@@ -20,7 +20,7 @@
     "groq-sdk": "^0.7.0",
     "node-fetch": "^2.6.11",
     "openai": "^4.104.0",
-    "simple-git": "^3.20.0",
+    "simple-git": "^4.0.2",
     "telegraf": "^4.15.0"
   }
 }
