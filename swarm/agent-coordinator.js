@@ -1893,12 +1893,13 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
       console.log(`🔧 Round ${round + 1}: ${result.toolCalls.length} tool call(s)`);
 
       // Check if agent is stuck (calling same tool with same params AND the result failed)
-      const toolCallJson = JSON.stringify(result.toolCalls.map(tc => ({ name: tc.name, args: tc.args })));
+      // Stuck detection: compare by tool name + file path (ignore start_line differences)
+      const toolCallJson = JSON.stringify(result.toolCalls.map(tc => ({ name: tc.name, path: tc.args?.path || tc.args?.query || '' })));
       if (toolCallJson === lastToolCallJson) {
         toolStuckCount++;
         if (toolStuckCount >= 3) {
-          console.log(`⚠️  Agent stuck in loop (same tool call ${toolStuckCount}x) — bailing out`);
-          finalReply = `⚠️ I got stuck on ${result.toolCalls[0].name}("${result.toolCalls[0].args?.path || result.toolCalls[0].args?.query || ''}"). Try rephrasing your request or check if the file path is correct.`;
+          console.log(`⚠️  Agent stuck in loop (same tool+path ${toolStuckCount}x) — bailing out`);
+          finalReply = `⚠️ I got stuck on ${result.toolCalls[0].name}("${result.toolCalls[0].args?.path || result.toolCalls[0].args?.query || ''}"). The file may be truncated — try asking me to rewrite it completely.`;
           break;
         }
       } else {
