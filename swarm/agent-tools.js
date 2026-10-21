@@ -46,7 +46,7 @@ export class AgentTools {
 
   // ── Tool implementations ───────────────────────────────────
 
-  async readFile(filePath, startLine = 0, maxLines = 300) {
+  async readFile(filePath, startLine = 0, maxLines = 80) {
     if (!this.token) return '❌ GITHUB_TOKEN not set';
     try {
       const data    = await this.githubGet(filePath);
