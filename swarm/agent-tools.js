@@ -69,6 +69,29 @@ export class AgentTools {
     try {
       let sha;
       try { sha = (await this.githubGet(filePath)).sha; } catch (_) {}
+      
+      // Auto-fix: Replace SafeAreaView from 'react-native' with 'react-native-safe-area-context'
+      if (filePath.match(/\.(ts|tsx|js|jsx)$/)) {
+        content = content.replace(
+          /import\s+\{([^}]*)SafeAreaView([^}]*)\}\s+from\s+['"]react-native['"]/g,
+          (match, before, after) => {
+            const cleaned = (before + after).split(',').map(s => s.trim()).filter(s => s && s !== 'SafeAreaView');
+            return `import { ${cleaned.join(', ')} } from 'react-native'`;
+          }
+        );
+        if (content.includes('<SafeAreaView') && !content.includes("from 'react-native-safe-area-context'") && !content.includes('from "react-native-safe-area-context"')) {
+          const lines = content.split('\n');
+          let lastImportIdx = -1;
+          for (let i = 0; i < lines.length; i++) {
+            if (lines[i].trim().startsWith('import ')) lastImportIdx = i;
+          }
+          if (lastImportIdx >= 0) {
+            lines.splice(lastImportIdx + 1, 0, "import { SafeAreaView } from 'react-native-safe-area-context';");
+            content = lines.join('\n');
+          }
+        }
+      }
+      
       await this.githubPut(filePath, content, message || `AI: update ${filePath}`, sha);
       return `✅ Written and pushed to GitHub: ${filePath}`;
     } catch (err) {
@@ -98,6 +121,32 @@ export class AgentTools {
       }
       
       let updated = content.replace(oldString, newString);
+
+      // Auto-fix: Replace SafeAreaView from 'react-native' with 'react-native-safe-area-context'
+      // SafeAreaView from react-native is a no-op on Android — must use react-native-safe-area-context
+      if (filePath.match(/\.(ts|tsx|js|jsx)$/)) {
+        // Remove SafeAreaView from react-native import
+        updated = updated.replace(
+          /import\s+\{([^}]*)SafeAreaView([^}]*)\}\s+from\s+['"]react-native['"]/g,
+          (match, before, after) => {
+            const cleaned = (before + after).split(',').map(s => s.trim()).filter(s => s && s !== 'SafeAreaView');
+            return `import { ${cleaned.join(', ')} } from 'react-native'`;
+          }
+        );
+        // Add SafeAreaView from react-native-safe-area-context if it's used in the file but not yet imported from there
+        if (updated.includes('<SafeAreaView') && !updated.includes("from 'react-native-safe-area-context'") && !updated.includes('from "react-native-safe-area-context"')) {
+          // Add import after the last react-native import line
+          const lines = updated.split('\n');
+          let lastImportIdx = -1;
+          for (let i = 0; i < lines.length; i++) {
+            if (lines[i].trim().startsWith('import ')) lastImportIdx = i;
+          }
+          if (lastImportIdx >= 0) {
+            lines.splice(lastImportIdx + 1, 0, "import { SafeAreaView } from 'react-native-safe-area-context';");
+            updated = lines.join('\n');
+          }
+        }
+      }
 
       // Auto-fix duplicate imports — consolidate imports from same source
       if (filePath.match(/\.(ts|tsx|js|jsx)$/)) {
