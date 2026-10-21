@@ -82,7 +82,7 @@ class MultiLLMProvider {
       } catch (err) {
         lastError = err;
         console.error(`❌ ${provider.name} failed: ${err.message}`);
-        this.rotateProvider();
+        if (attempts < this.providers.length) this.rotateProvider();
       }
     }
     throw new Error(`All providers failed. Last: ${lastError?.message}`);
@@ -95,6 +95,7 @@ class MultiLLMProvider {
    * Returns: { text: string, toolCalls: [{name, args}] }
    */
   async callLLMWithTools(messages, toolSchemas, options = {}) {
+    const startIndex = this.currentProviderIndex;
     let attempts = 0;
     let lastError = null;
 
@@ -109,7 +110,7 @@ class MultiLLMProvider {
       } catch (err) {
         lastError = err;
         console.error(`❌ ${provider.name} failed: ${err.message}`);
-        this.rotateProvider();
+        if (attempts < this.providers.length) this.rotateProvider();
       }
     }
     throw new Error(`All providers failed. Last: ${lastError?.message}`);
