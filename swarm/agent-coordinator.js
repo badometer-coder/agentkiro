@@ -2114,6 +2114,7 @@ console.log('🤖 Agent Coordinator Started');
 console.log('📱 Listening for Telegram messages...\n');
 
 // Start Telegram bot with polling
+let bot409Retries = 0;
 async function startBot() {
   try {
     await bot.launch({
@@ -2123,14 +2124,22 @@ async function startBot() {
     console.log('✅ Telegram bot launched (polling mode)');
   } catch (error) {
     if (error.message && error.message.includes('409')) {
-      console.error('❌ Bot conflict (409): Another instance is running');
-      console.error('   Gracefully exiting to allow new instance to take over...');
-      // Exit cleanly so Render can restart with only one instance
-      process.exit(0);
+      bot409Retries++;
+      console.error(`❌ Bot conflict (409): Another instance is running (retry ${bot409Retries})`);
+      if (bot409Retries >= 10) {
+        console.error('   Max retries reached — old instance should be gone by now. Exiting to force restart.');
+        process.exit(1);
+      }
+      // Wait with backoff: 5s, 10s, 15s, 20s... up to 60s
+      // This gives the OLD instance time to be killed by Render during deploy
+      const waitTime = Math.min(5000 * bot409Retries, 60000);
+      console.error(`   Retrying in ${waitTime/1000}s... (waiting for old instance to shut down)`);
+      setTimeout(startBot, waitTime);
+    } else {
+      console.error('❌ Failed to launch Telegram bot:', error.message);
+      console.error('   Retrying in 15 seconds...');
+      setTimeout(startBot, 15000);
     }
-    console.error('❌ Failed to launch Telegram bot:', error.message);
-    console.error('   Retrying in 15 seconds...');
-    setTimeout(startBot, 15000);
   }
 }
 
