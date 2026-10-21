@@ -1744,41 +1744,15 @@ ${fileErrors}`;
 - GitHub repo: badometer-coder/proximity-app
 - Auto-deploys on every push to main branch
 
-# Project file structure — USE EXACT PATHS
-src/components/common/Avatar.tsx
-src/components/common/EmptyState.tsx
-src/components/proximity/ProximityHeader.tsx
-src/components/proximity/DistanceBadge.tsx
-src/components/proximity/NearbyPeerCard.tsx
-src/components/proximity/RadiusFilterPill.tsx
-src/components/proximity/RadiusSlider.tsx
-src/components/proximity/RadiusWheel.tsx
-src/components/proximity/SignalIndicator.tsx
-src/config/supabase.ts
-src/constants/theme.ts
-src/context/AuthContext.tsx
-src/context/ThemeContext.tsx
-src/hooks/auth/useAuth.ts
-src/hooks/location/useCurrentLocation.ts
-src/hooks/messaging/useChatMessages.ts
-src/hooks/proximity/useBluetoothProximity.ts
-src/hooks/proximity/useNearbyPeers.ts
-src/lib/utils/index.ts
-src/screens/HomeScreen.tsx
-src/screens/auth/LoginScreen.tsx
-src/screens/auth/ProfileSetupScreen.tsx
-src/screens/main/HomeScreen.tsx
-src/screens/main/ChatListScreen.tsx
-src/screens/main/ChatThreadScreen.tsx
-src/screens/main/ProximityFeedScreen.tsx
-src/theme/DesignTokens.ts
-src/theme/index.ts
-src/types/database.ts
-src/types/index.ts
-App.tsx
-package.json
-
-IMPORTANT: Components are in src/components/proximity/ NOT src/components/. Screens are in src/screens/main/ or src/screens/auth/. Always use the full path from this list.
+# Key file paths (USE EXACT PATHS)
+- Header: src/components/proximity/ProximityHeader.tsx
+- Screens: src/screens/main/HomeScreen.tsx, ChatListScreen.tsx, ChatThreadScreen.tsx, ProximityFeedScreen.tsx
+- Auth: src/screens/auth/LoginScreen.tsx, ProfileSetupScreen.tsx
+- Context: src/context/ThemeContext.tsx, AuthContext.tsx
+- Hooks: src/hooks/auth/useAuth.ts, src/hooks/proximity/useNearbyPeers.ts
+- Theme: src/theme/DesignTokens.ts, src/constants/theme.ts
+- Config: src/config/supabase.ts, App.tsx, package.json
+NOTE: Components are in src/components/proximity/ NOT src/components/. Screens in src/screens/main/ or src/screens/auth/.
 
 # Tool-use enforcement
 You MUST use your tools to take action — not describe what you would do. When you say you will do something, immediately make the tool call. Never end your turn with a promise — execute it now.
@@ -1943,8 +1917,8 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
           }
         }
 
-        const trimmed = (toolResult || '').length > 12000
-          ? (toolResult || '').substring(0, 12000) + '\n...(truncated)'
+        const trimmed = (toolResult || '').length > 6000
+          ? (toolResult || '').substring(0, 6000) + '\n...(truncated)'
           : toolResult || '';
         console.log(`  [result] ${trimmed.substring(0, 150)}...`);
         return { tc, trimmed };
@@ -1956,18 +1930,20 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
       }
 
       // Trim old tool results to stay under token limits (keep system + last 6 messages)
-      // Groq free tier: 7000 tokens/min — large file reads blow this fast
+      // Groq free tier: 7000 ITPM — large file reads blow this fast
       const systemMsg = messages[0];
       const tail = messages.slice(1);
-      if (tail.length > 12) {
-        // Keep only the last 12 messages (6 assistant+tool pairs), drop older tool results
-        const trimmedTail = tail.slice(-12);
+      if (tail.length > 6) {
+        // Keep only the last 6 messages (3 assistant+tool pairs), drop older tool results
+        const trimmedTail = tail.slice(-6);
         messages.length = 0;
         messages.push(systemMsg, ...trimmedTail);
         console.log(`  ✂️  Trimmed message history to ${messages.length} messages to stay under token limit`);
       }
 
       round++;
+      // Small delay to avoid burning through Groq's per-minute token limits
+      await new Promise(r => setTimeout(r, 2000));
     } // end while loop
 
     if (!finalReply) finalReply = 'Task complete. Check the app — changes have been pushed to GitHub.';

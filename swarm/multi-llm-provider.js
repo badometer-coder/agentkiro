@@ -160,7 +160,7 @@ class MultiLLMProvider {
         tools,
         tool_choice: 'auto',
         temperature: options.temperature ?? 0.3,
-        max_tokens: options.max_tokens || 2000,
+        max_tokens: options.max_tokens || 800,
       });
 
       const msg = res.choices[0]?.message;
