@@ -1443,6 +1443,20 @@ async function getLatestGitHubErrors() {
 // Handle all natural language messages
 bot.on('text', async (ctx) => {
   let typingInterval = null;
+  
+  // Helper: Restart typing indicator after each reply
+  const restartTyping = () => {
+    ctx.telegram.sendChatAction(ctx.chat.id, 'typing').catch(() => {});
+  };
+  
+  // Wrap ctx.reply to auto-restart typing after each message
+  const originalReply = ctx.reply.bind(ctx);
+  ctx.reply = async (...args) => {
+    const result = await originalReply(...args);
+    restartTyping(); // Restart typing after message is sent
+    return result;
+  };
+  
   try {
     const raw = ctx.message.text.trim();
     const msg = raw.toLowerCase();
@@ -1451,10 +1465,8 @@ bot.on('text', async (ctx) => {
 
     // Show typing indicator immediately so user knows the agent is working
     ctx.telegram.sendChatAction(ctx.chat.id, 'typing').catch(() => {});
-    // Keep refreshing typing indicator every 4 seconds during long tasks
-    typingInterval = setInterval(() => {
-      ctx.telegram.sendChatAction(ctx.chat.id, 'typing').catch(() => {});
-    }, 4000);
+    // Keep refreshing typing indicator every 2 seconds during long tasks
+    typingInterval = setInterval(restartTyping, 2000);
     console.log(`⌨️  Typing indicator started for chat ${ctx.chat.id}`);
 
     // --- STOP / ABORT ---
