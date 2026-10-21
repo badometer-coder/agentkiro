@@ -1744,6 +1744,42 @@ ${fileErrors}`;
 - GitHub repo: badometer-coder/proximity-app
 - Auto-deploys on every push to main branch
 
+# Project file structure — USE EXACT PATHS
+src/components/common/Avatar.tsx
+src/components/common/EmptyState.tsx
+src/components/proximity/ProximityHeader.tsx
+src/components/proximity/DistanceBadge.tsx
+src/components/proximity/NearbyPeerCard.tsx
+src/components/proximity/RadiusFilterPill.tsx
+src/components/proximity/RadiusSlider.tsx
+src/components/proximity/RadiusWheel.tsx
+src/components/proximity/SignalIndicator.tsx
+src/config/supabase.ts
+src/constants/theme.ts
+src/context/AuthContext.tsx
+src/context/ThemeContext.tsx
+src/hooks/auth/useAuth.ts
+src/hooks/location/useCurrentLocation.ts
+src/hooks/messaging/useChatMessages.ts
+src/hooks/proximity/useBluetoothProximity.ts
+src/hooks/proximity/useNearbyPeers.ts
+src/lib/utils/index.ts
+src/screens/HomeScreen.tsx
+src/screens/auth/LoginScreen.tsx
+src/screens/auth/ProfileSetupScreen.tsx
+src/screens/main/HomeScreen.tsx
+src/screens/main/ChatListScreen.tsx
+src/screens/main/ChatThreadScreen.tsx
+src/screens/main/ProximityFeedScreen.tsx
+src/theme/DesignTokens.ts
+src/theme/index.ts
+src/types/database.ts
+src/types/index.ts
+App.tsx
+package.json
+
+IMPORTANT: Components are in src/components/proximity/ NOT src/components/. Screens are in src/screens/main/ or src/screens/auth/. Always use the full path from this list.
+
 # Tool-use enforcement
 You MUST use your tools to take action — not describe what you would do. When you say you will do something, immediately make the tool call. Never end your turn with a promise — execute it now.
 Every response must either (a) contain tool calls making progress, or (b) deliver a final result. Intentions without action are not acceptable.
