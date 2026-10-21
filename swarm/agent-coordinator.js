@@ -1943,13 +1943,17 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
         messages.push({ role: 'tool', tool_call_id: tc.id || tc.name, content: trimmed });
       }
 
-      // Trim old tool results to stay under token limits (keep system + last 6 messages)
+      // Trim old tool results to stay under token limits (keep system + user + last 6 messages)
       // Groq free tier: 7000 ITPM — large file reads blow this fast
       const systemMsg = messages[0];
+      const userMsg = messages.find(m => m.role === 'user');
       const tail = messages.slice(1);
       if (tail.length > 6) {
-        // Keep only the last 6 messages (3 assistant+tool pairs), drop older tool results
+        // Keep only the last 6 messages, but ALWAYS include the original user message
         const trimmedTail = tail.slice(-6);
+        if (userMsg && !trimmedTail.some(m => m.role === 'user')) {
+          trimmedTail.unshift(userMsg);
+        }
         messages.length = 0;
         messages.push(systemMsg, ...trimmedTail);
         console.log(`  ✂️  Trimmed message history to ${messages.length} messages to stay under token limit`);
