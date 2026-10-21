@@ -99,18 +99,63 @@ export class AgentTools {
       
       let updated = content.replace(oldString, newString);
 
-      // Auto-fix duplicate imports — the most common patch side-effect
+      // Auto-fix duplicate imports — consolidate imports from same source
       if (filePath.match(/\.(ts|tsx|js|jsx)$/)) {
         const lines = updated.split('\n');
-        const seenImports = new Set();
-        const deduped = lines.filter(line => {
+        const importsBySource = {}; // { 'react-native': [imports...] }
+        const otherLines = [];
+        
+        // Parse all imports
+        for (const line of lines) {
           const trimmed = line.trim();
-          if (!trimmed.startsWith('import ')) return true;
-          if (seenImports.has(trimmed)) return false;
-          seenImports.add(trimmed);
-          return true;
-        });
-        updated = deduped.join('\n');
+          if (!trimmed.startsWith('import ')) {
+            otherLines.push(line);
+            continue;
+          }
+          
+          // Match: import { A, B } from 'module';
+          const match = trimmed.match(/^import\s+\{([^}]+)\}\s+from\s+['"]([^'"]+)['"]/);
+          if (match) {
+            const imports = match[1].split(',').map(s => s.trim()).filter(Boolean);
+            const source = match[2];
+            
+            if (!importsBySource[source]) importsBySource[source] = new Set();
+            imports.forEach(imp => importsBySource[source].add(imp));
+          } else {
+            // Keep non-destructured imports (default imports, etc.)
+            otherLines.push(line);
+          }
+        }
+        
+        // Rebuild consolidated imports
+        const consolidatedImports = Object.entries(importsBySource)
+          .map(([source, imports]) => `import { ${Array.from(imports).sort().join(', ')} } from '${source}';`)
+          .sort();
+        
+        // Merge back: consolidatedImports + otherLines (skipping old empty imports)
+        const finalLines = [];
+        let importsSectionDone = false;
+        
+        for (const line of otherLines) {
+          const trimmed = line.trim();
+          // Skip old import lines
+          if (trimmed.startsWith('import ') && !importsSectionDone) {
+            continue;
+          }
+          // When we hit first non-import, insert all consolidated imports
+          if (!importsSectionDone && trimmed !== '' && !trimmed.startsWith('import ')) {
+            finalLines.push(...consolidatedImports);
+            importsSectionDone = true;
+          }
+          finalLines.push(line);
+        }
+        
+        // If file ends with imports, add consolidated at end
+        if (!importsSectionDone) {
+          finalLines.push(...consolidatedImports);
+        }
+        
+        updated = finalLines.join('\n');
       }
 
       await this.githubPut(filePath, updated, `AI: patch ${filePath}`, data.sha);
