@@ -651,8 +651,6 @@ IMPORT RULES — CRITICAL (violating these breaks the build):
 
 ${TYPE_DEFINITIONS_CONTEXT}
 
-${memory.getLearningsForPrompt()}
-
 ${webSearchContext}
 
 ADDITIONAL PACKAGES AVAILABLE (these come with Expo even if not in package.json):
@@ -1748,7 +1746,9 @@ ${fileErrors}`;
 
     const serverDate = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     const serverTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-    const skillsContext = skillsManager.loadSkillsForContext(raw);
+    // Skip skills context for Groq (token limit too low) — only inject for Gemini
+    const currentProvider = llmProvider.getCurrentProvider?.()?.name || '';
+    const skillsContext = currentProvider.includes('Gemini') ? skillsManager.loadSkillsForContext(raw) : '';
 
     const systemPrompt = `You are Fag, an AI coding agent for the Proximity social app.
 
