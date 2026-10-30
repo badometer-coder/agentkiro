@@ -45,7 +45,7 @@ const skillsManager = new SkillsManager();
 const selfImprovementEngine = new SelfImprovementEngine();
 
 const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN, {
-  handlerTimeout: 10 * 60 * 1000, // 10 minutes — tasks take time
+  handlerTimeout: 90 * 1000, // 90 seconds — telegraf timeout, tasks run async beyond this
 });
 
 const APP_REQUIREMENTS = `
@@ -1468,7 +1468,15 @@ async function getLatestGitHubErrors() {
 }
 
 // Handle all natural language messages
-bot.on('text', async (ctx) => {
+bot.on('text', (ctx) => {
+  // Run handler async so telegraf doesn't timeout waiting for long tasks
+  handleMessage(ctx).catch(err => {
+    console.error('❌ Handler error:', err.message);
+    ctx.reply(`Error: ${err.message}`).catch(() => {});
+  });
+});
+
+async function handleMessage(ctx) {
   let typingInterval = null;
   
   // Helper: Restart typing indicator after each reply
@@ -2099,7 +2107,7 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
   } finally {
     clearInterval(typingInterval);
   }
-});
+}
 
 // Helper: run N tasks
 async function runTasks(ctx, count) {
