@@ -19,18 +19,18 @@ class MultiLLMProvider {
   }
 
   initializeProviders() {
-    // Gemini first (best quality)
+    // Groq first — faster and more reliable than Gemini on free tier
+    const groqKeys = this.loadApiKeys('GROQ_API_KEY');
+    groqKeys.forEach((key, idx) => {
+      this.providers.push({ type: 'groq', key, client: new Groq({ apiKey: key, timeout: 120000 }), name: `Groq #${idx + 1}` });
+    });
+
+    // Gemini as fallback
     const geminiKeys = this.loadApiKeys('GEMINI_API_KEY');
     geminiKeys.forEach((key, idx) => {
       if (key && !key.includes('paste_your')) {
         this.providers.push({ type: 'gemini', key, client: new GoogleGenerativeAI(key), name: `Gemini #${idx + 1}` });
       }
-    });
-
-    // Groq as fallback (OpenAI-compatible, supports function calling)
-    const groqKeys = this.loadApiKeys('GROQ_API_KEY');
-    groqKeys.forEach((key, idx) => {
-      this.providers.push({ type: 'groq', key, client: new Groq({ apiKey: key, timeout: 120000 }), name: `Groq #${idx + 1}` });
     });
 
     // OpenAI as fallback
