@@ -697,11 +697,11 @@ OUTPUT: Modified file(s) only. Start each with "File: <path>" then the complete 
       result = await Promise.race([
         llmProvider.callLLM(messages, {
           temperature: 0.3,
-          max_tokens: 4000,  // Increased — complex files need more space to avoid truncation
-          timeout: 6 * 60 * 1000,
+          max_tokens: 4000,
+          timeout: 2 * 60 * 1000,
         }),
         new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Task execution timeout - took too long')), 7 * 60 * 1000) // 7 minute hard limit
+          setTimeout(() => reject(new Error('Task execution timeout')), 3 * 60 * 1000)
         ),
       ]);
     } catch (error) {
@@ -1804,8 +1804,7 @@ You MUST use your tools to take action — not describe what you would do. When 
 Every response must either (a) contain tool calls making progress, or (b) deliver a final result. Intentions without action are not acceptable.
 
 # Finishing the job
-A task is ONLY complete when the code is written AND committed to GitHub. After every write_file or patch, run run_tsc to verify the code compiles. If there are errors, fix them before declaring done.
-After completing, always tell the user: what file(s) you changed, what exactly you added/modified, and that it's been pushed.
+A task is ONLY complete when the code is written AND committed to GitHub. After every write_file or patch, tell the user what you changed and that it's been pushed. Do NOT run run_tsc — it times out on this server.
 
 # Feature implementation rules
 - "Add a toggle" = add a Switch/TouchableOpacity component to the UI file, not just change colors.
@@ -1885,11 +1884,6 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
           },
           required: ['path', 'old_string', 'new_string'],
         },
-      },
-      {
-        name: 'run_tsc',
-        description: 'Run TypeScript compiler on the app to check for errors. Use after making changes to verify the code compiles, or when the user pastes build errors.',
-        parameters: { type: 'object', properties: {} },
       },
       {
         name: 'web_search',
