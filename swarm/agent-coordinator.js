@@ -1807,6 +1807,12 @@ ${fileErrors}`;
 - Config: src/config/supabase.ts, App.tsx, package.json
 NOTE: Components are in src/components/proximity/ NOT src/components/. Screens in src/screens/main/ or src/screens/auth/.
 
+# Supabase profiles table (use for user data)
+- Table: profiles — columns: id, username, full_name, age, avatar_url
+- To get current user profile: supabase.from('profiles').select('full_name, username').eq('id', session.user.id).single()
+- useAuth() provides: { session, user, signIn, signUp, signOut, signInWithGoogle, loading }
+- session.user.id = current user ID, session.user.email = email
+
 # Tool-use enforcement
 You MUST use your tools to take action — not describe what you would do. When you say you will do something, immediately make the tool call. Never end your turn with a promise — execute it now.
 Every response must either (a) contain tool calls making progress, or (b) deliver a final result. Intentions without action are not acceptable.
