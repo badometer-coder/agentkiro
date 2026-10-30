@@ -189,17 +189,13 @@ export class AgentTools {
           .map(([source, imports]) => `import { ${Array.from(imports).sort().join(', ')} } from '${source}';`)
           .sort();
         
-        // Merge back: consolidatedImports + otherLines (skipping old empty imports)
+        // Merge back: consolidatedImports at top, then rest of file
         const finalLines = [];
         let importsSectionDone = false;
         
         for (const line of otherLines) {
           const trimmed = line.trim();
-          // Skip old import lines
-          if (trimmed.startsWith('import ') && !importsSectionDone) {
-            continue;
-          }
-          // When we hit first non-import, insert all consolidated imports
+          // When we hit first non-import non-empty line, insert consolidated imports first
           if (!importsSectionDone && trimmed !== '' && !trimmed.startsWith('import ')) {
             finalLines.push(...consolidatedImports);
             importsSectionDone = true;
