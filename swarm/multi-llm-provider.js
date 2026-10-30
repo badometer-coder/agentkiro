@@ -88,11 +88,13 @@ class MultiLLMProvider {
 
   _isDailyLimitError(err) {
     const msg = err.message || '';
-    // Daily quota: "retry in Xh", "TPD" (tokens per day), "quota exceeded"
+    // Daily quota, token limits, invalid key — all permanent failures for this session
     return msg.includes('retry in') && msg.includes('h') ||
            msg.includes('TPD') ||
            msg.includes('quota') && msg.includes('PerDay') ||
-           msg.includes('PerDayPerProjectPerModel');
+           msg.includes('PerDayPerProjectPerModel') ||
+           msg.includes('ACCESS_TOKEN_TYPE_UNSUPPORTED') ||  // invalid Gemini key
+           msg.includes('401 Unauthorized');                  // any invalid key
   }
 
   /**
