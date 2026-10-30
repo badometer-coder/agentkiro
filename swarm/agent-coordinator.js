@@ -1496,7 +1496,25 @@ bot.on('text', async (ctx) => {
     typingInterval = setInterval(restartTyping, 2000);
     console.log(`⌨️  Typing indicator started for chat ${ctx.chat.id}`);
 
-    // --- STOP / ABORT ---
+    // --- NETWORK/CONFIG QUESTIONS — answer directly without tools ---
+    if (msg.includes('network request failed') || msg.includes('login failed') || 
+        msg.includes('why is') || msg.includes('what is') || msg.includes('why does') ||
+        (msg.includes('not working') && !msg.match(/fix|change|update|add|remove/i))) {
+      // These are diagnostic questions — answer from knowledge, don't read code
+      const quickMessages = [
+        { role: 'system', content: `You are a React Native + Supabase expert. Answer the user's question directly and concisely. Do NOT use tools. Give a short practical answer.` },
+        { role: 'user', content: raw }
+      ];
+      const quickAnswer = await llmProvider.callLLM(quickMessages, { temperature: 0.3, max_tokens: 300 });
+      if (quickAnswer) {
+        conversationHistory.push({ role: 'user', content: raw });
+        conversationHistory.push({ role: 'assistant', content: quickAnswer });
+        saveConversationHistory();
+        return ctx.reply(quickAnswer);
+      }
+    }
+
+
     if (msg.match(/^(stop|abort|cancel|halt|kill|enough|just stop|stop it|stop now)/i)) {
       stopRequested = true;
       taskQueue = [];
