@@ -1844,7 +1844,7 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
       },
       {
         name: 'write_file',
-        description: 'Write/create a file in GitHub repo. Auto-commits and pushes.',
+        description: 'Write a COMPLETE file. ONLY use for NEW files. For existing files always use patch instead.',
         parameters: {
           type: 'object',
           properties: {
@@ -1857,12 +1857,12 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
       },
       {
         name: 'patch',
-        description: 'Find old_string in a file and replace with new_string. Auto-commits. ALWAYS read_file first to get exact text.',
+        description: 'PREFERRED TOOL. Replaces old_string with new_string in a file. Use for ALL changes to existing files — much smaller than write_file. Read the file first, copy the exact text, then patch just that section.',
         parameters: {
           type: 'object',
           properties: {
             path: { type: 'string' },
-            old_string: { type: 'string', description: 'Exact text to find (copy from read_file output)' },
+            old_string: { type: 'string', description: 'Exact text to find — copy exactly from read_file output' },
             new_string: { type: 'string', description: 'Replacement text' },
           },
           required: ['path', 'old_string', 'new_string'],
