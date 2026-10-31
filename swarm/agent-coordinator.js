@@ -1550,6 +1550,38 @@ async function handleMessage(ctx) {
       stopRequested = false;
     }
 
+    // --- EAS CLI ERRORS ---
+    if (msg.includes('eas project not configured') || msg.includes('eas init')) {
+      await ctx.reply('🔧 Fixing EAS configuration...');
+      const fs = await import('fs');
+      const path = await import('path');
+      const { execSync } = await import('child_process');
+      const appPath = process.env.PROJECT_PATH || '/Users/owner/proximity-app-final';
+      
+      if (!fs.existsSync(path.join(appPath, 'eas.json'))) {
+        const sources = ['/Users/owner/proximity-social-app/eas.json'];
+        for (const src of sources) {
+          if (fs.existsSync(src)) {
+            fs.copyFileSync(src, path.join(appPath, 'eas.json'));
+            await ctx.reply('✅ Copied eas.json');
+            break;
+          }
+        }
+      }
+      
+      try {
+        const output = execSync(`cd "${appPath}" && npx --yes eas-cli@latest init --id c0435db0-4f3b-45ca-b909-45a544efdc7d --non-interactive 2>&1`, {
+          encoding: 'utf-8',
+          timeout: 60000,
+        });
+        return ctx.reply(`✅ EAS initialized:\n\n${output.substring(0, 400)}`);
+      } catch (err) {
+        const out = String(err.stdout || err.stderr || err.message || '');
+        if (out.includes('already')) return ctx.reply('✅ EAS already configured.');
+        return ctx.reply(`⚠️ ${out.substring(0, 600)}`);
+      }
+    }
+
     // --- GREETINGS ---
     if (/^(hey|hi|hello|sup|yo|hiya|howdy)[\s!.?]*$/.test(msg)) {
       return ctx.reply(`Hey! 👋 I'm your dev agent building the Proximity app.\n\n📋 Queued: ${taskQueue.length} tasks\n✅ Done: ${taskLog.length} tasks\n\nJust tell me what to do naturally!`);
