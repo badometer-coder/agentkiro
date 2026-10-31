@@ -1976,7 +1976,7 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
         toolStuckCount++;
         if (toolStuckCount >= 3) {
           console.log(`⚠️  Agent stuck in loop (same tool+path ${toolStuckCount}x) — bailing out`);
-          finalReply = `I couldn't find that file. Let me search for the text you're looking for using search_files.`;
+          finalReply = `Hmm, let me search for that.`;
           break;
         }
       } else {
