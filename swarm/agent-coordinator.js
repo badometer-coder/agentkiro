@@ -1982,9 +1982,14 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
         const hasReads = result.toolCalls.some(tc => tc.name === 'read_file' || tc.name === 'search_files');
         const hasEdits = result.toolCalls.some(tc => tc.name === 'patch' || tc.name === 'write_file');
         if (hasReads && !hasEdits) {
-          console.log(`🔒 ACTION LOCK - must edit ${targetFile}, blocking further reads`);
-          messages.push({ role: 'user', content: `[SYSTEM] ACTION LOCK ENGAGED. You have identified ${targetFile} needs fixing. STOP reading other files. Use patch on ${targetFile} NOW.` });
-          result.toolCalls = result.toolCalls.filter(tc => tc.name === 'patch' || tc.name === 'write_file');
+          // Only lock for header/UI/spacing issues
+          const userMsgLower = (messages.find(m => m.role === 'user')?.content || '').toLowerCase();
+          const isUIFix = userMsgLower.includes('header') || userMsgLower.includes('top') || userMsgLower.includes('down') || userMsgLower.includes('spacing') || userMsgLower.includes('safe area');
+          if (isUIFix) {
+            console.log(`🔒 ACTION LOCK - must edit ${targetFile}, blocking further reads`);
+            messages.push({ role: 'user', content: `[SYSTEM] ACTION LOCK ENGAGED. You have identified ${targetFile} needs fixing. STOP reading other files. Use patch on ${targetFile} NOW.` });
+            result.toolCalls = result.toolCalls.filter(tc => tc.name === 'patch' || tc.name === 'write_file');
+          }
         }
       }
 
@@ -2035,9 +2040,15 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
             targetReadRound = round;
             console.log(`🎯 Target file locked: ${targetFile}`);
           } else if (targetFile && tc.args.path !== targetFile && editCount === 0) {
-            // Don't read other files once target is locked
-            console.log(`🔒 Blocking read of ${tc.args.path} - target locked to ${targetFile}`);
-            return { tc, trimmed: `❌ ACTION LOCK: Focus on ${targetFile}. Use patch to fix it.` };
+          // Don't read other files once target is locked
+          if (targetFile && tc.args.path !== targetFile && editCount === 0) {
+            const userMsgLower = (messages.find(m => m.role === 'user')?.content || '').toLowerCase();
+            const isUIFix = userMsgLower.includes('header') || userMsgLower.includes('top') || userMsgLower.includes('down') || userMsgLower.includes('spacing') || userMsgLower.includes('safe area');
+            if (isUIFix) {
+              console.log(`🔒 Blocking read of ${tc.args.path} - target locked to ${targetFile}`);
+              return { tc, trimmed: `❌ ACTION LOCK: Focus on ${targetFile}. Use patch to fix it.` };
+            }
+          }
           }
           if (readFilesThisTurn.has(cacheKey)) {
             console.log(`  ↩ cache hit: ${tc.args.path}`);
