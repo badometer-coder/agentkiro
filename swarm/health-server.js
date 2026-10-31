@@ -1,4 +1,5 @@
 import http from 'http';
+import https from 'https';
 
 const port = process.env.PORT || 10000;
 
@@ -68,7 +69,6 @@ export function startHealthServer() {
     const publicUrl = process.env.RENDER_EXTERNAL_URL || `https://agent-swarm-ceti.onrender.com`;
     setInterval(() => {
       // External ping — keeps Render free tier awake
-      const https = require('https');
       https.get(`${publicUrl}/`, () => {}).on('error', () => {});
       // Also local ping
       http.get(`http://localhost:${port}/`, () => {}).on('error', () => {});

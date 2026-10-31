@@ -112,6 +112,8 @@ NAVIGATION: Expo Router (file-based routing)
 let taskQueue = [];
 let currentTask = null;
 let taskLog = [];
+let lastTaskKey = '';      // prevent duplicate task runs
+let lastTaskTime = 0;
 let stopRequested = false; // Global stop flag — set by "stop" command
 
 // === CONVERSATION PERSISTENCE (Hermes-style: save to disk, load on startup) ===
@@ -147,7 +149,7 @@ function saveConversationHistory() {
     // Don't save error/stuck messages — they poison future tasks
     const cleaned = conversationHistory.filter(m => {
       const content = m.content || '';
-      return !content.includes('⚠️ I got stuck') && !content.includes('The file may be truncated');
+      return !content.includes('⚠️ I got stuck') && !content.includes('The file may be truncated') && !content.includes('not found');
     });
     fs.writeFileSync(conversationFile, JSON.stringify(cleaned.slice(-6)), 'utf-8');
   } catch (e) {
@@ -1503,6 +1505,15 @@ async function handleMessage(ctx) {
     if (raw.startsWith('/') && raw !== '/providers') return; // allow /providers through
     console.log(`\n💬 User: "${raw}"`);
 
+    // Deduplicate — ignore same message within 30 seconds
+    const taskKey = raw.substring(0, 100);
+    if (taskKey === lastTaskKey && Date.now() - lastTaskTime < 30000) {
+      console.log(`⚠️ Duplicate message ignored: "${taskKey}"`);
+      return;
+    }
+    lastTaskKey = taskKey;
+    lastTaskTime = Date.now();
+
     // Show typing indicator immediately so user knows the agent is working
     ctx.telegram.sendChatAction(ctx.chat.id, 'typing').catch(() => {});
     // Keep refreshing typing indicator every 2 seconds during long tasks
@@ -1551,7 +1562,7 @@ async function handleMessage(ctx) {
     }
 
     // --- PROVIDERS ---
-    if (msg === '/providers' || msg.includes('what provider') || msg.includes('which model') || msg.includes('what model')) {
+    if (msg === '/providers' || msg.includes('what providers') || msg.includes('which providers') || msg === 'providers') {
       const stats = llmProvider.getStats();
       const lines = stats.providers.map(p => `${p.includes('(DEAD)') ? '💀' : '✅'} ${p}`);
       return ctx.reply(`🤖 LLM Providers (${stats.aliveProviders}/${stats.totalProviders} alive)\n\n${lines.join('\n')}`);
@@ -1953,7 +1964,7 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
         toolStuckCount++;
         if (toolStuckCount >= 3) {
           console.log(`⚠️  Agent stuck in loop (same tool+path ${toolStuckCount}x) — bailing out`);
-          finalReply = `⚠️ I got stuck trying to ${result.toolCalls[0].name}("${result.toolCalls[0].args?.path || result.toolCalls[0].args?.query || ''}"). Please try rephrasing your request or be more specific about what to change.`;
+          finalReply = `I couldn't find that file. Let me search for the text you're looking for using search_files.`;
           break;
         }
       } else {

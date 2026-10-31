@@ -44,6 +44,33 @@ export class AgentTools {
     return res.json();
   }
 
+  async searchFiles(query) {
+    if (!this.token) return '❌ GITHUB_TOKEN not set';
+    try {
+      const fetch = (await import('node-fetch')).default;
+      // Search code in repo
+      const url = `https://api.github.com/search/code?q=${encodeURIComponent(query + ' repo:' + this.repo)}&per_page=10`;
+      const res = await fetch(url, {
+        headers: { 
+          Authorization: `token ${this.token}`, 
+          Accept: 'application/vnd.github.v3.text-match+json' 
+        },
+      });
+      if (!res.ok) throw new Error(`GitHub search failed: ${res.status}`);
+      const data = await res.json();
+      if (!data.items || data.items.length === 0) {
+        return `🔍 No results found for "${query}" in ${this.repo}`;
+      }
+      const results = data.items.map((item, i) => {
+        const matches = item.text_matches?.map(m => m.fragment).join(' ... ') || '';
+        return `${i + 1}. ${item.path}\n   ${matches.substring(0, 200)}`;
+      }).join('\n\n');
+      return `🔍 Search results for "${query}":\n\n${results}\n\nUse read_file to view full contents.`;
+    } catch (err) {
+      return `❌ search_files failed: ${err.message}`;
+    }
+  }
+
   // ── Tool implementations ───────────────────────────────────
 
   async readFile(filePath, startLine = 0, maxLines = 60) {
@@ -266,6 +293,10 @@ export class AgentTools {
 
   defineTools() {
     return {
+      search_files: {
+        description: 'Search for text/content across the GitHub repository. Use this FIRST when looking for specific text like "hello", UI strings, function names, etc. Returns file paths and matching snippets.',
+        execute: async (p) => this.searchFiles(p.query),
+      },
       read_file: {
         description: 'Read a file from GitHub repo. Returns content with line numbers. Use start_line to page through large files.',
         execute: async (p) => this.readFile(p.path, p.start_line || 0, p.max_lines || 300),
