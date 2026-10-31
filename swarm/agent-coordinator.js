@@ -2388,15 +2388,13 @@ process.on('SIGINT', () => {
   process.exit(0);
 });
 
-// CI error notification — DISABLED (burns too many tokens with broken ProximityHeader.tsx)
-// TODO: Re-enable once ProximityHeader.tsx is fixed
+// CI error notification
 setCIErrorCallback(async (errorMessage) => {
-  console.log(`🚨 CI Error received but auto-fix is DISABLED to conserve tokens`);
-  console.log(`   Error: ${errorMessage.substring(0, 100)}`);
+  console.log(`🚨 CI Error received`);
   if (telegramBotContext) {
     await telegramBotContext.telegram.sendMessage(
       telegramBotContext.chat.id,
-      `🚨 CI failed:\n\n${errorMessage.substring(0, 400)}\n\n⚠️ Auto-fix disabled — please fix manually via Telegram.`
+      `🚨 CI/EAS failed:\n\n${errorMessage.substring(0, 600)}`
     ).catch(() => {});
   }
 });
