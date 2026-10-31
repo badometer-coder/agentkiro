@@ -1520,7 +1520,24 @@ async function handleMessage(ctx) {
     typingInterval = setInterval(restartTyping, 2000);
     console.log(`⌨️  Typing indicator started for chat ${ctx.chat.id}`);
 
-    // --- NETWORK/CONFIG QUESTIONS — answer directly without tools ---
+    // Ask for clarification if ambiguous
+    if ((msg.includes('app name') || msg.includes('title') || msg.includes('name')) && 
+        (msg.includes('change') || msg.includes('update')) && 
+        !msg.includes('app.json') && !msg.includes('package.json') &&
+        !msg.match(/"[^"]+"/) && msg.length < 80) {
+      // Check if it's asking for clarification
+      if (msg.includes('home screen only') || msg.includes('only from')) {
+        // They specified home screen - proceed
+      } else if (msg.includes('everywhere') || msg.includes('all screens')) {
+        // They specified scope - proceed  
+      } else {
+        // Ambiguous - ask for clarification
+        conversationHistory.push({ role: 'user', content: raw });
+        conversationHistory.push({ role: 'assistant', content: 'Do you mean:\n1) The app name in app.json (what shows in launcher) - change everywhere\n2) The "Proximity" text in the header/UI - change where exactly?' });
+        saveConversationHistory();
+        return ctx.reply('Do you mean:\n1) The app name in app.json (what shows in launcher)\n2) The "Proximity" text shown in the header/UI on screen?\n\nIf #2, which screen(s)?');
+      }
+    }
     if (msg.includes('network request failed') || msg.includes('login failed') || 
         msg.includes('why is') || msg.includes('what is') || msg.includes('why does') ||
         (msg.includes('not working') && !msg.match(/fix|change|update|add|remove/i))) {
