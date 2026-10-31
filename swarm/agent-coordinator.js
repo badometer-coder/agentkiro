@@ -1947,7 +1947,7 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
     llmProvider.resetToFirst();
 
     while (round < MAX_ROUNDS) {
-      const result = await llmProvider.callLLMWithTools(messages, toolSchemas, { temperature: 0.3 });
+      const result = await llmProvider.callLLMWithTools(messages, toolSchemas, { temperature: 0.2 });
 
       // No tool calls — this is the final answer
       if (!result.toolCalls || result.toolCalls.length === 0) {

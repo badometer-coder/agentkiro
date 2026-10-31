@@ -165,7 +165,7 @@ class MultiLLMProvider {
         model: provider.type === 'groq' ? 'qwen/qwen3.8-27b' : 'gpt-4o-mini',
         messages,
         temperature: options.temperature ?? 0.3,
-        max_tokens: options.max_tokens || 1000,
+        max_tokens: options.max_tokens || 400,
       });
       return res.choices[0]?.message?.content || '';
     }
@@ -204,7 +204,7 @@ class MultiLLMProvider {
         tools,
         tool_choice: 'auto',
         temperature: options.temperature ?? 0.3,
-        max_tokens: options.max_tokens || 2000,
+        max_tokens: options.max_tokens || 600,
       });
 
       const msg = res.choices[0]?.message;
@@ -231,12 +231,12 @@ class MultiLLMProvider {
         parameters: t.parameters || { type: 'object', properties: {} },
       }));
 
-      const model = provider.client.getGenerativeModel({
-        model: 'gemini-2.0-flash-lite',
-        generationConfig: { maxOutputTokens: 8192, temperature: options.temperature ?? 0.3 },
-        tools: [{ functionDeclarations }],
-        ...(systemPrompt ? { systemInstruction: { parts: [{ text: systemPrompt }] } } : {}),
-      });
+        model: provider.client.getGenerativeModel({
+          model: 'gemini-2.0-flash-lite',
+          generationConfig: { maxOutputTokens: 800, temperature: options.temperature ?? 0.3 },
+          tools: [{ functionDeclarations }],
+          ...(systemPrompt ? { systemInstruction: { parts: [{ text: systemPrompt }] } } : {}),
+        });
 
       const result = await model.generateContent({ contents });
       const response = result.response;
