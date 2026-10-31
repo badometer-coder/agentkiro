@@ -2100,8 +2100,8 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
         }
         // Summarize old reads instead of dumping raw content
         const compacted = trimmedTail.map(m => {
-          if (m.role === 'tool' && m.content && m.content.length > 800) {
-            return { ...m, content: m.content.substring(0, 800) + '\n...[summarized]' };
+          if (m.role === 'tool' && m.content && m.content.length > 600) {
+            return { ...m, content: m.content.substring(0, 600) + '\n...[summarized]' };
           }
           return m;
         });
@@ -2112,7 +2112,7 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
 
       round++;
       // Small delay to avoid burning through Groq's per-minute token limits
-      await new Promise(r => setTimeout(r, 2000));
+      await new Promise(r => setTimeout(r, 800));
     } // end while loop
 
     // Add working memory summary to context
