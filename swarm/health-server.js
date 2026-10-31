@@ -64,8 +64,13 @@ const server = http.createServer((req, res) => {
 export function startHealthServer() {
   server.listen(port, () => {
     console.log(`🏥 Health server on port ${port}`);
-    // Self-ping every 10 min to prevent Render sleep
+    // Ping public URL every 10 min to prevent Render free tier sleep
+    const publicUrl = process.env.RENDER_EXTERNAL_URL || `https://agent-swarm-ceti.onrender.com`;
     setInterval(() => {
+      // External ping — keeps Render free tier awake
+      const https = require('https');
+      https.get(`${publicUrl}/`, () => {}).on('error', () => {});
+      // Also local ping
       http.get(`http://localhost:${port}/`, () => {}).on('error', () => {});
     }, 10 * 60 * 1000);
   });
