@@ -2026,16 +2026,16 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
       const systemMsg = messages[0];
       const userMsg = messages.find(m => m.role === 'user');
       const tail = messages.slice(1);
-      if (tail.length > 8) {
-        const trimmedTail = tail.slice(-8);
+      if (tail.length > 6) {
+        const trimmedTail = tail.slice(-6);
         // Always keep the user message
         if (userMsg && !trimmedTail.some(m => m.role === 'user')) {
           trimmedTail.unshift(userMsg);
         }
         // Truncate long tool results to save tokens but keep them
         const compacted = trimmedTail.map(m => {
-          if (m.role === 'tool' && m.content && m.content.length > 1500) {
-            return { ...m, content: m.content.substring(0, 1500) + '\n...(truncated)' };
+          if (m.role === 'tool' && m.content && m.content.length > 1000) {
+            return { ...m, content: m.content.substring(0, 1000) + '\n...(truncated)' };
           }
           return m;
         });
