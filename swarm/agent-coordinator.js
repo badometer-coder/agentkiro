@@ -1982,16 +1982,15 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
         const hasReads = result.toolCalls.some(tc => tc.name === 'read_file' || tc.name === 'search_files');
         const hasEdits = result.toolCalls.some(tc => tc.name === 'patch' || tc.name === 'write_file');
         if (hasReads && !hasEdits) {
-          // Only lock for header/UI/spacing issues
           const userMsgLower = (messages.find(m => m.role === 'user')?.content || '').toLowerCase();
-          const isUIFix = userMsgLower.includes('header') || userMsgLower.includes('top') || userMsgLower.includes('down') || userMsgLower.includes('spacing') || userMsgLower.includes('safe area') || userMsgLower.includes('way down');
-          const isAppRename = userMsgLower.includes('app name') || userMsgLower.includes('rename') && userMsgLower.includes('name');
+          const isUIFix = (userMsgLower.includes('header') || userMsgLower.includes('top') || userMsgLower.includes('down') || userMsgLower.includes('spacing') || userMsgLower.includes('safe area') || userMsgLower.includes('way down')) && !(userMsgLower.includes('app name') || userMsgLower.includes('rename'));
+          const isAppRename = userMsgLower.includes('app name') || (userMsgLower.includes('rename') && userMsgLower.includes('name')) || (userMsgLower.includes('change') && userMsgLower.includes('name'));
           if (isUIFix && !isAppRename) {
             console.log(`🔒 ACTION LOCK - must edit ${targetFile}, blocking further reads`);
             messages.push({ role: 'user', content: `[SYSTEM] ACTION LOCK ENGAGED. You have identified ${targetFile} needs fixing. STOP reading other files. Use patch on ${targetFile} NOW.` });
             result.toolCalls = result.toolCalls.filter(tc => tc.name === 'patch' || tc.name === 'write_file');
           }
-          if (isAppRename && targetFile && (targetFile === 'app.json' || targetFile.includes('app.'))) {
+          if (isAppRename && targetFile && (targetFile === 'app.json' || targetFile.includes('app.') || targetFile === 'package.json')) {
             console.log(`🔒 ACTION LOCK - must edit ${targetFile}`);
             messages.push({ role: 'user', content: `[SYSTEM] ACTION LOCK ENGAGED. Edit ${targetFile} to change name. Use patch NOW.` });
             result.toolCalls = result.toolCalls.filter(tc => tc.name === 'patch' || tc.name === 'write_file');
@@ -2041,11 +2040,20 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
         let toolResult;
         if (tc.name === 'read_file' && tc.args?.path) {
           const cacheKey = `${tc.args.path}:${tc.args.start_line || 0}`;
-          if (!targetFile && (tc.args.path.includes('ProximityHeader') || tc.args.path.includes('HomeScreen') || tc.args.path.includes('header') || tc.args.path.includes('safe') || tc.args.path.includes('style'))) {
+          const userMsgLowerCheck = (messages.find(m => m.role === 'user')?.content || '').toLowerCase();
+          const isAppRename = userMsgLowerCheck.includes('app name') || userMsgLowerCheck.includes('rename') && userMsgLowerCheck.includes('name') || (userMsgLowerCheck.includes('change') && userMsgLowerCheck.includes('name'));
+          if (isAppRename && (tc.args.path === 'app.json' || tc.args.path === 'app.config.js' || tc.args.path === 'app.config.ts' || tc.args.path === 'package.json')) {
+            if (!targetFile || targetFile.includes('ProximityHeader') || targetFile.includes('HomeScreen')) {
+              targetFile = tc.args.path;
+              targetReadRound = round;
+              console.log(`🎯 App rename target: ${targetFile}`);
+            }
+          }
+          if (!targetFile && !isAppRename && (tc.args.path.includes('ProximityHeader') || tc.args.path.includes('HomeScreen') || tc.args.path.includes('header') || tc.args.path.includes('safe') || tc.args.path.includes('style'))) {
             targetFile = tc.args.path;
             targetReadRound = round;
             console.log(`🎯 Target file locked: ${targetFile}`);
-          } else if (targetFile && tc.args.path !== targetFile && editCount === 0) {
+          } else if (targetFile && tc.args.path !== targetFile && editCount === 0 && !isAppRename) {
           // Don't read other files once target is locked
           if (targetFile && tc.args.path !== targetFile && editCount === 0) {
             const userMsgLower = (messages.find(m => m.role === 'user')?.content || '').toLowerCase();
