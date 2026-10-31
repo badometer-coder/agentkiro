@@ -1983,7 +1983,7 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
         const hasEdits = result.toolCalls.some(tc => tc.name === 'patch' || tc.name === 'write_file');
         if (hasReads && !hasEdits) {
           const userMsgLower = (messages.find(m => m.role === 'user')?.content || '').toLowerCase();
-          const isUIFix = (userMsgLower.includes('header') || userMsgLower.includes('top') || userMsgLower.includes('down') || userMsgLower.includes('spacing') || userMsgLower.includes('safe area') || userMsgLower.includes('way down')) && !(userMsgLower.includes('app name') || userMsgLower.includes('rename'));
+          const isUIFix = (userMsgLower.includes('header') || userMsgLower.includes('top') || userMsgLower.includes('down') || userMsgLower.includes('spacing') || userMsgLower.includes('safe area') || userMsgLower.includes('way down')) && !(userMsgLower.includes('app name') || userMsgLower.includes('rename') || userMsgLower.includes('change') && userMsgLower.includes('name'));
           const isAppRename = userMsgLower.includes('app name') || (userMsgLower.includes('rename') && userMsgLower.includes('name')) || (userMsgLower.includes('change') && userMsgLower.includes('name'));
           if (isUIFix && !isAppRename) {
             console.log(`🔒 ACTION LOCK - must edit ${targetFile}, blocking further reads`);
