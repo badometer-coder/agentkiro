@@ -2191,6 +2191,16 @@ bot.command('memory', (ctx) => {
   ctx.reply(`📚 MEMORY STATS\n\n📊 Session started: ${stats.sessionStart.substring(0, 10)}\n✅ Completed: ${stats.tasksCompleted}\n❌ Failed: ${stats.tasksFailed}\n💬 Conversations: ${stats.conversationTurns}\n📈 Success rate: ${stats.successRate?.current?.toFixed(1) || 'N/A'}%\n\n🏆 Best practices: ${stats.lastBestPractices?.length || 0}`);
 });
 
+// Providers command - show live provider status
+bot.command('providers', (ctx) => {
+  const stats = llmProvider.getStats();
+  const lines = stats.providers.map((p, i) => {
+    const isDead = stats.deadProviders?.includes(p.replace(' (DEAD)', ''));
+    return `${isDead ? '💀' : '✅'} ${p}`;
+  });
+  ctx.reply(`🤖 LLM Providers (${stats.aliveProviders || stats.totalProviders} alive)\n\n${lines.join('\n')}`);
+});
+
 // Debug: Log ALL updates
 bot.use((ctx, next) => {
   console.log(`📨 Update: ${ctx.update.update_id}, Type: ${Object.keys(ctx.update).filter(k => k !== 'update_id')[0]}`);
