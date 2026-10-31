@@ -1886,6 +1886,17 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
     // NOTE: The LLM should batch multiple read_file calls in a single round
     const toolSchemas = [
       {
+        name: 'search_files',
+        description: 'Search for text/content across the GitHub repo. Use when you don\'t know the exact file path - e.g. looking for "app name", UI text, or function names.',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'Text to search for' },
+          },
+          required: ['query'],
+        },
+      },
+      {
         name: 'read_file',
         description: 'Read a file from the GitHub repo. Returns content with line numbers. For large files, use start_line to page through sections.',
         parameters: {
