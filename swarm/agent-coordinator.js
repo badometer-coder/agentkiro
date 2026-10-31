@@ -1500,7 +1500,7 @@ async function handleMessage(ctx) {
   try {
     const raw = ctx.message.text.trim();
     const msg = raw.toLowerCase();
-    if (raw.startsWith('/')) return;
+    if (raw.startsWith('/') && raw !== '/providers') return; // allow /providers through
     console.log(`\n💬 User: "${raw}"`);
 
     // Show typing indicator immediately so user knows the agent is working
@@ -1548,6 +1548,13 @@ async function handleMessage(ctx) {
     if (msg.includes('status') || msg.includes('progress') || (msg.includes('how many') && msg.includes('task')) || msg.includes('done so far')) {
       const stats = memory.getStats();
       return ctx.reply(`📊 Progress\n✅ Done: ${taskLog.length}\n⏳ Queued: ${taskQueue.length}\n💡 Success: ${stats.successRate?.current?.toFixed(1) || 'N/A'}%${taskLog.length > 0 ? `\n\nLast: ${(taskLog[taskLog.length-1]?.task||'').substring(0,80)}` : ''}`);
+    }
+
+    // --- PROVIDERS ---
+    if (msg === '/providers' || msg.includes('what provider') || msg.includes('which model') || msg.includes('what model')) {
+      const stats = llmProvider.getStats();
+      const lines = stats.providers.map(p => `${p.includes('(DEAD)') ? '💀' : '✅'} ${p}`);
+      return ctx.reply(`🤖 LLM Providers (${stats.aliveProviders}/${stats.totalProviders} alive)\n\n${lines.join('\n')}`);
     }
 
     // --- LIST TASKS ---
