@@ -19,7 +19,7 @@ const server = http.createServer((req, res) => {
   }
 
   // CI error webhook from GitHub Actions
-  if (req.method === 'POST' && req.url === '/ci-error') {
+  if (req.method === 'POST') {
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
@@ -29,7 +29,7 @@ const server = http.createServer((req, res) => {
         try {
           const parsed = JSON.parse(body);
           // Accept various field names: error, errors, message, output
-          error = parsed.error || parsed.errors || parsed.message || parsed.output || null;
+          error = parsed.error || parsed.errors || parsed.message || parsed.output || parsed.log || parsed.text || null;
           // If it's an array, join it
           if (Array.isArray(error)) error = error.join('\n');
         } catch (e) {
@@ -39,18 +39,18 @@ const server = http.createServer((req, res) => {
 
         // Guard: skip if no error message
         if (!error || typeof error !== 'string' || error.length === 0) {
-          console.log(`⚠️ CI webhook received but no error message in payload`);
+          console.log(`⚠️ POST to ${req.url} received but no error message in payload`);
           res.writeHead(200);
           res.end('ok - no error content');
           return;
         }
 
-        console.log(`🚨 CI Error received: ${error.substring(0, 100)}...`);
+        console.log(`🚨 Error received from ${req.url}: ${error.substring(0, 100)}...`);
         if (ciErrorCallback) ciErrorCallback(error);
         res.writeHead(200);
         res.end('ok');
       } catch (e) {
-        console.error(`❌ CI webhook error: ${e.message}`);
+        console.error(`❌ Webhook error: ${e.message}`);
         res.writeHead(400);
         res.end('bad request');
       }
