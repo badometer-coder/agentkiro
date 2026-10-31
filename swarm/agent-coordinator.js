@@ -1538,6 +1538,37 @@ async function handleMessage(ctx) {
         return ctx.reply('Do you mean:\n1) The app name in app.json (what shows in launcher)\n2) The "Proximity" text shown in the header/UI on screen?\n\nIf #2, which screen(s)?');
       }
     }
+    // --- EAS UPDATE ---
+    if (msg.match(/eas\s*update/i)) {
+      await ctx.reply('🚀 Running eas update...');
+      const appPath = process.env.PROJECT_PATH || '/opt/render/project/proximity-app';
+      const { execSync } = await import('child_process');
+      const fs = await import('fs');
+      try {
+        if (!fs.existsSync(appPath)) {
+          await ctx.reply('📥 Cloning repo...');
+          const token = process.env.GITHUB_TOKEN;
+          const repoUrl = token ? `https://${token}@github.com/badometer-coder/proximity-app.git` : `https://github.com/badometer-coder/proximity-app.git`;
+          execSync(`git clone ${repoUrl} "${appPath}"`, { stdio: 'pipe', timeout: 60000 });
+        } else {
+          execSync(`git -C "${appPath}" pull origin main`, { stdio: 'pipe', timeout: 30000 });
+        }
+      } catch (e) {}
+      let output = '';
+      try {
+        output = execSync(`cd "${appPath}" && npx --yes eas-cli@latest update --branch preview --message "update" 2>&1`, { encoding: 'utf-8', timeout: 300000 }).trim();
+        if (output.match(/error|failed/i)) {
+          await ctx.reply(`❌ EAS Update failed:\n\n${output.substring(0, 800)}`);
+        } else {
+          await ctx.reply(`✅ EAS Update done:\n\n${output.substring(0, 500)}`);
+        }
+      } catch (err) {
+        output = String(err.stdout || err.stderr || err.message || '').trim();
+        await ctx.reply(`❌ EAS Update failed:\n\n${output.substring(0, 1000)}`);
+      }
+      return;
+    }
+
     if (msg.includes('network request failed') || msg.includes('login failed') || 
         msg.includes('why is') || msg.includes('what is') || msg.includes('why does') ||
         (msg.includes('not working') && !msg.match(/fix|change|update|add|remove/i))) {
