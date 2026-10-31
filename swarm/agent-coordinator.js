@@ -1520,55 +1520,7 @@ async function handleMessage(ctx) {
     typingInterval = setInterval(restartTyping, 2000);
     console.log(`⌨️  Typing indicator started for chat ${ctx.chat.id}`);
 
-    // Ask for clarification if ambiguous
-    if ((msg.includes('app name') || msg.includes('title') || msg.includes('name')) && 
-        (msg.includes('change') || msg.includes('update')) && 
-        !msg.includes('app.json') && !msg.includes('package.json') &&
-        !msg.match(/"[^"]+"/) && msg.length < 80) {
-      // Check if it's asking for clarification
-      if (msg.includes('home screen only') || msg.includes('only from')) {
-        // They specified home screen - proceed
-      } else if (msg.includes('everywhere') || msg.includes('all screens')) {
-        // They specified scope - proceed  
-      } else {
-        // Ambiguous - ask for clarification
-        conversationHistory.push({ role: 'user', content: raw });
-        conversationHistory.push({ role: 'assistant', content: 'Do you mean:\n1) The app name in app.json (what shows in launcher) - change everywhere\n2) The "Proximity" text in the header/UI - change where exactly?' });
-        saveConversationHistory();
-        return ctx.reply('Do you mean:\n1) The app name in app.json (what shows in launcher)\n2) The "Proximity" text shown in the header/UI on screen?\n\nIf #2, which screen(s)?');
-      }
-    }
-    // --- EAS UPDATE ---
-    if (msg.match(/eas\s*update/i)) {
-      await ctx.reply('🚀 Running eas update...');
-      const appPath = process.env.PROJECT_PATH || '/opt/render/project/proximity-app';
-      const { execSync } = await import('child_process');
-      const fs = await import('fs');
-      try {
-        if (!fs.existsSync(appPath)) {
-          await ctx.reply('📥 Cloning repo...');
-          const token = process.env.GITHUB_TOKEN;
-          const repoUrl = token ? `https://${token}@github.com/badometer-coder/proximity-app.git` : `https://github.com/badometer-coder/proximity-app.git`;
-          execSync(`git clone ${repoUrl} "${appPath}"`, { stdio: 'pipe', timeout: 60000 });
-        } else {
-          execSync(`git -C "${appPath}" pull origin main`, { stdio: 'pipe', timeout: 30000 });
-        }
-      } catch (e) {}
-      let output = '';
-      try {
-        output = execSync(`cd "${appPath}" && npx --yes eas-cli@latest update --branch preview --message "update" 2>&1`, { encoding: 'utf-8', timeout: 300000 }).trim();
-        if (output.match(/error|failed/i)) {
-          await ctx.reply(`❌ EAS Update failed:\n\n${output.substring(0, 800)}`);
-        } else {
-          await ctx.reply(`✅ EAS Update done:\n\n${output.substring(0, 500)}`);
-        }
-      } catch (err) {
-        output = String(err.stdout || err.stderr || err.message || '').trim();
-        await ctx.reply(`❌ EAS Update failed:\n\n${output.substring(0, 1000)}`);
-      }
-      return;
-    }
-
+    // --- NETWORK/CONFIG QUESTIONS — answer directly without tools ---
     if (msg.includes('network request failed') || msg.includes('login failed') || 
         msg.includes('why is') || msg.includes('what is') || msg.includes('why does') ||
         (msg.includes('not working') && !msg.match(/fix|change|update|add|remove/i))) {
@@ -2004,12 +1956,6 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
     const readFilesThisTurn = new Map(); // track file reads — avoid redundant re-reads
     let readCount = 0;
     let editCount = 0;
-    let targetFile = null;
-    let targetReadRound = -1;
-    let workingMemory = {}; // Hermes-style: summarize what we've learned about files
-    let targetFileLocked = false;
-    let filesReadSinceLock = new Set();
-    let actionLocked = false; // Once target identified, force edit after read
 
     // Always start from the best provider (Gemini) — don't inherit rotation state from previous turn
     llmProvider.resetToFirst();
@@ -2025,35 +1971,7 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
 
         console.log(`🔧 Round ${round + 1}: ${result.toolCalls.length} tool call(s)`);
 
-      // Action lock - if we've identified target file and read it, force edit
-      if (targetFile && editCount === 0 && targetReadRound >= 0 && round - targetReadRound >= 2) {
-        const hasReads = result.toolCalls.some(tc => tc.name === 'read_file' || tc.name === 'search_files');
-        const hasEdits = result.toolCalls.some(tc => tc.name === 'patch' || tc.name === 'write_file');
-        if (hasReads && !hasEdits) {
-          const userMsgLower = (messages.find(m => m.role === 'user')?.content || '').toLowerCase();
-          const isUIFix = (userMsgLower.includes('header') || userMsgLower.includes('top') || userMsgLower.includes('down') || userMsgLower.includes('spacing') || userMsgLower.includes('safe area') || userMsgLower.includes('way down')) && !(userMsgLower.includes('app name') || userMsgLower.includes('rename') || userMsgLower.includes('change') && userMsgLower.includes('name'));
-          const isAppRename = userMsgLower.includes('app name') || (userMsgLower.includes('rename') && userMsgLower.includes('name')) || (userMsgLower.includes('change') && userMsgLower.includes('name'));
-          const isHomeOnlyRename = isAppRename && userMsgLower.includes('home screen');
-          if (isUIFix && !isAppRename) {
-            console.log(`🔒 ACTION LOCK - must edit ${targetFile}, blocking further reads`);
-            messages.push({ role: 'user', content: `[SYSTEM] ACTION LOCK ENGAGED. You have identified ${targetFile} needs fixing. STOP reading other files. Use patch on ${targetFile} NOW.` });
-            result.toolCalls = result.toolCalls.filter(tc => tc.name === 'patch' || tc.name === 'write_file');
-          } else if (isAppRename && !isHomeOnlyRename && targetFile && (targetFile === 'app.json' || targetFile.includes('app.') || targetFile === 'package.json')) {
-            console.log(`🔒 ACTION LOCK - must edit ${targetFile}`);
-            messages.push({ role: 'user', content: `[SYSTEM] ACTION LOCK ENGAGED. Edit ${targetFile} to change name. Use patch NOW.` });
-            result.toolCalls = result.toolCalls.filter(tc => tc.name === 'patch' || tc.name === 'write_file');
-          } else if (isHomeOnlyRename && targetFile && targetFile.includes('HomeScreen')) {
-            console.log(`🔒 ACTION LOCK - must edit ${targetFile}`);
-            messages.push({ role: 'user', content: `[SYSTEM] ACTION LOCK ENGAGED. Edit ${targetFile} only. Use patch NOW.` });
-            result.toolCalls = result.toolCalls.filter(tc => tc.name === 'patch' || tc.name === 'write_file');
-          }
-        }
-      }
-          // For vague "yes please" etc, don't lock aggressively
-        }
-      }
-
-      // Hermes-style: enforce action bias
+        // Hermes-style: enforce action bias
         const hasReads = result.toolCalls.some(tc => tc.name === 'read_file' || tc.name === 'search_files');
         const hasEdits = result.toolCalls.some(tc => tc.name === 'patch' || tc.name === 'write_file');
         if (hasReads && !hasEdits && readCount >= 2 && round >= 2) {
@@ -2095,40 +2013,12 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
         let toolResult;
         if (tc.name === 'read_file' && tc.args?.path) {
           const cacheKey = `${tc.args.path}:${tc.args.start_line || 0}`;
-          const userMsgLowerCheck = (messages.find(m => m.role === 'user')?.content || '').toLowerCase();
-          const isAppRename = userMsgLowerCheck.includes('app name') || userMsgLowerCheck.includes('rename') && userMsgLowerCheck.includes('name') || (userMsgLowerCheck.includes('change') && userMsgLowerCheck.includes('name'));
-          if (isAppRename && (tc.args.path === 'app.json' || tc.args.path === 'app.config.js' || tc.args.path === 'app.config.ts' || tc.args.path === 'package.json')) {
-            if (!targetFile || targetFile.includes('ProximityHeader') || targetFile.includes('HomeScreen')) {
-              targetFile = tc.args.path;
-              targetReadRound = round;
-              console.log(`🎯 App rename target: ${targetFile}`);
-            }
-          }
-          if (!targetFile && !isAppRename && (tc.args.path.includes('ProximityHeader') || tc.args.path.includes('HomeScreen') || tc.args.path.includes('header') || tc.args.path.includes('safe') || tc.args.path.includes('style'))) {
-            targetFile = tc.args.path;
-            targetReadRound = round;
-            console.log(`🎯 Target file locked: ${targetFile}`);
-          } else if (targetFile && tc.args.path !== targetFile && editCount === 0 && !isAppRename) {
-          // Don't read other files once target is locked
-          if (targetFile && tc.args.path !== targetFile && editCount === 0 && !isAppRename) {
-            const userMsgLower = (messages.find(m => m.role === 'user')?.content || '').toLowerCase();
-            const isUIFix = userMsgLower.includes('header') || userMsgLower.includes('top') || userMsgLower.includes('down') || userMsgLower.includes('spacing') || userMsgLower.includes('safe area') || userMsgLower.includes('way down');
-            if (isUIFix && !(userMsgLower.includes('yes') && userMsgLower.length < 10)) {
-              console.log(`🔒 Blocking read of ${tc.args.path} - target locked to ${targetFile}`);
-              return { tc, trimmed: `❌ ACTION LOCK: Focus on ${targetFile}. Use patch to fix it.` };
-            }
-          }
-          }
-          }
           if (readFilesThisTurn.has(cacheKey)) {
             console.log(`  ↩ cache hit: ${tc.args.path}`);
             toolResult = `[Already read this turn] ${readFilesThisTurn.get(cacheKey)}`;
           } else {
             toolResult = await agentTools.executeTool(tc.name, tc.args);
-            if (result.text) {
-            workingMemory[tc.args.path] = result.text.substring(0, 400).replace(/\n+/g, ' ').trim();
-            console.log(`🧠 Working memory: ${tc.args.path}`);
-          }
+            if (!(toolResult || '').startsWith('❌')) readFilesThisTurn.set(cacheKey, toolResult);
           }
         } else {
           toolResult = await agentTools.executeTool(tc.name, tc.args);
@@ -2148,17 +2038,12 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
 
       const toolResults = await Promise.all(toolPromises);
       for (const { tc, trimmed } of toolResults) {
+        if (tc.name === 'read_file' || tc.name === 'search_files') readCount++;
         if (tc.name === 'patch' || tc.name === 'write_file') editCount++;
-        if (tc.name === 'patch' || tc.name === 'write_file') {
-          // If editing target file, mark budget satisfied
-          if (targetFile && tc.args?.path === targetFile) {
-            console.log(`✅ Editing target file ${targetFile} - budget satisfied`);
-          }
-        }
         messages.push({ role: 'tool', tool_call_id: tc.id || tc.name, content: trimmed });
       }
 
-      // Trim old tool results to stay under token limits - Hermes style summarization
+      // Trim old tool results to stay under token limits
       const systemMsg = messages[0];
       const userMsg = messages.find(m => m.role === 'user');
       const tail = messages.slice(1);
@@ -2168,10 +2053,10 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
         if (userMsg && !trimmedTail.some(m => m.role === 'user')) {
           trimmedTail.unshift(userMsg);
         }
-        // Summarize old reads instead of dumping raw content
+        // Truncate long tool results to save tokens but keep them
         const compacted = trimmedTail.map(m => {
-          if (m.role === 'tool' && m.content && m.content.length > 600) {
-            return { ...m, content: m.content.substring(0, 600) + '\n...[summarized]' };
+          if (m.role === 'tool' && m.content && m.content.length > 1000) {
+            return { ...m, content: m.content.substring(0, 1000) + '\n...(truncated)' };
           }
           return m;
         });
@@ -2182,14 +2067,10 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
 
       round++;
       // Small delay to avoid burning through Groq's per-minute token limits
-      await new Promise(r => setTimeout(r, 800));
+      await new Promise(r => setTimeout(r, 2000));
     } // end while loop
 
-    // Add working memory summary to context
-    if (Object.keys(workingMemory).length > 0) {
-      const summary = Object.entries(workingMemory).map(([k,v]) => `- ${k}: ${v}`).join('\n');
-      messages[0].content += `\n\n# Working Memory (what I know)\n${summary}`;
-    }
+    if (!finalReply) finalReply = 'Task complete. Check the app — changes have been pushed to GitHub.';
 
     // Remove any leaked tool syntax just in case
     finalReply = finalReply.replace(/\[TOOL:[^\]]*\]/g, '').trim() || finalReply;
@@ -2419,13 +2300,15 @@ process.on('SIGINT', () => {
   process.exit(0);
 });
 
-// CI error notification
+// CI error notification — DISABLED (burns too many tokens with broken ProximityHeader.tsx)
+// TODO: Re-enable once ProximityHeader.tsx is fixed
 setCIErrorCallback(async (errorMessage) => {
-  console.log(`🚨 CI Error received`);
+  console.log(`🚨 CI Error received but auto-fix is DISABLED to conserve tokens`);
+  console.log(`   Error: ${errorMessage.substring(0, 100)}`);
   if (telegramBotContext) {
     await telegramBotContext.telegram.sendMessage(
       telegramBotContext.chat.id,
-      `🚨 CI/EAS failed:\n\n${errorMessage.substring(0, 600)}`
+      `🚨 CI failed:\n\n${errorMessage.substring(0, 400)}\n\n⚠️ Auto-fix disabled — please fix manually via Telegram.`
     ).catch(() => {});
   }
 });
@@ -2449,12 +2332,3 @@ process.on('uncaughtException', (error) => {
 process.on('unhandledRejection', (reason, promise) => {
   console.error('❌ Unhandled Rejection:', reason);
 });
-
-}
-}
-}
-}
-}
-}
-}
-}
