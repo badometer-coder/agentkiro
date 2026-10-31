@@ -1861,12 +1861,10 @@ A task is ONLY complete when the code is written AND committed to GitHub. After 
 - Example: \`import { useSafeAreaInsets } from 'react-native-safe-area-context'; const insets = useSafeAreaInsets(); <View style={{ paddingTop: insets.top }}>\`
 - This app runs on Android (package: com.daniprox.proximityappfinal). Android-safe fixes are mandatory.
 
-# When to use tools vs when to just reply
-- Short/vague messages ("?", "ok", "done?") → reply directly, NO tools.
-- Status questions → check conversation history first.
-- Coding tasks → use read_file first, then write_file or patch.
-- Verification → use read_file on the relevant file, answer from what you see.
-- Error output pasted by user (contains "error TS", "error:", "failed", exit code, stack traces) → treat as a fix request. Read the affected files and fix immediately. NEVER show a progress report when the user pastes errors.
+# Finding files
+- If you don't know the exact file path for UI elements, use search_files FIRST with key terms from the user's message.
+- For headers/top bars with app name/theme toggle, search for "Proximity" or related text.
+- Don't guess App.tsx blindly. Use search_files when unsure.
 
 # Parallel tool calls — MANDATORY
 You MUST batch all reads into a single round. On your FIRST tool call, read ALL files you need at once — never read one file per turn.
