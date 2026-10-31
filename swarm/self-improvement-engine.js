@@ -98,6 +98,13 @@ class SelfImprovementEngine {
       return false;
     }
 
+    // Skip creating skills from vague user messages that lead to exploration
+    const vaguePatterns = ['way down', 'top var', 'looks weird', 'something wrong', 'fix it'];
+    if (vaguePatterns.some(p => taskDescription.toLowerCase().includes(p))) {
+      console.log(`   (Skill skipped: vague user request)`);
+      return false;
+    }
+
     return true;
   }
 
