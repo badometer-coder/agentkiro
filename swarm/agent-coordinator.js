@@ -1836,14 +1836,12 @@ NOTE: Components are in src/components/proximity/ NOT src/components/. Screens i
 - useAuth() provides: { session, user, signIn, signUp, signOut, signInWithGoogle, loading }
 - session.user.id = current user ID, session.user.email = email
 
-# Act, don't just explore
-- Be natural in conversation. Talk like a human would.
-- When user asks to fix/change/add something, understand it and act. Use tools to make changes.
-- Keep responses concise and conversational. 
-- If it's a coding task, read files, make the fix, and tell them what you did. 
-- Don't over-explain or give long monologues. Just do it.
-- **ACT AFTER READING**: If you have enough info to fix after reading 1-2 files, STOP exploring and PATCH immediately. Do not read every screen to understand the issue.
-- **Header/spacing issues**: "pushed down from the top", "header too low", "top bar down" almost always means missing safe area insets. Go straight to `src/components/proximity/ProximityHeader.tsx`. Read it, fix it with `useSafeAreaInsets()` from `react-native-safe-area-context`, patch it. Don't read App.tsx, HomeScreen.tsx, or every other screen first.
+# Hermes-style discipline
+- If user says "fix/change/update X" and you can identify the file from context or search_files, read THAT file once and PATCH it in the next round. Do NOT read 5 different files.
+- After reading a target file once and understanding the issue, your NEXT tool call MUST be patch or write_file (not read_file).
+- For layout/spacing/header issues: go straight to src/components/proximity/ProximityHeader.tsx. Read once. Fix with safe area insets if needed. Patch.
+- Never read the same file more than twice in one task.
+- If you've made 0 edits but read >= 2 files, you MUST make an edit on your next turn or say what you're doing.
 
 # Finishing the job
 A task is ONLY complete when the code is written AND committed to GitHub. After every write_file or patch, tell the user naturally what you changed and that it's pushed. Do NOT run run_tsc — it times out on this server.
@@ -1956,6 +1954,8 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
     let lastToolCallJson = '';
     let toolStuckCount = 0;
     const readFilesThisTurn = new Map(); // track file reads — avoid redundant re-reads
+    let readCount = 0;
+    let editCount = 0;
 
     // Always start from the best provider (Gemini) — don't inherit rotation state from previous turn
     llmProvider.resetToFirst();
@@ -1969,10 +1969,24 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
         break;
       }
 
-      console.log(`🔧 Round ${round + 1}: ${result.toolCalls.length} tool call(s)`);
+        console.log(`🔧 Round ${round + 1}: ${result.toolCalls.length} tool call(s)`);
 
-      // Check if agent is stuck (calling same tool with same params AND the result failed)
-      // Stuck detection: compare by tool name + file path (ignore start_line differences)
+        // Hermes-style: enforce action bias
+        const hasReads = result.toolCalls.some(tc => tc.name === 'read_file' || tc.name === 'search_files');
+        const hasEdits = result.toolCalls.some(tc => tc.name === 'patch' || tc.name === 'write_file');
+        if (hasReads && !hasEdits && readCount >= 2 && round >= 2) {
+          // Force action - we've read enough
+          console.log(`⚡ Action bias: forcing edit after ${readCount} reads`);
+          // Inject nudge into messages
+          messages.push({ role: 'user', content: '[SYSTEM] STOP READING. You have enough information. Make the fix now with patch or write_file. Do not read more files.' });
+        }
+        if (readCount >= 3 && editCount === 0 && round >= 3) {
+          console.log(`⚡ Hard action bias: must edit now`);
+          messages.push({ role: 'user', content: '[SYSTEM] CRITICAL: You have read ${readCount} files with ZERO edits. You MUST call patch or write_file on your next action. No more reads.' });
+        }
+
+        // Check if agent is stuck (calling same tool with same params AND the result failed)
+        // Stuck detection: compare by tool name + file path (ignore start_line differences)
       const toolCallJson = JSON.stringify(result.toolCalls.map(tc => ({ name: tc.name, path: tc.args?.path || tc.args?.query || '' })));
       if (toolCallJson === lastToolCallJson) {
         toolStuckCount++;
@@ -1990,7 +2004,9 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
       messages.push({ role: 'assistant', content: result.text || '', tool_calls: result.raw?.tool_calls });
 
       // Execute tool calls in parallel (Hermes pattern — cuts multi-file tasks from 6 rounds to 2)
-      const toolPromises = result.toolCalls.map(async (tc) => {
+      // Limit parallel reads like Hermes does - max 2
+      const callsToRun = result.toolCalls.slice(0, 2);
+      const toolPromises = callsToRun.map(async (tc) => {
         console.log(`  → ${tc.name}(${JSON.stringify(tc.args).substring(0, 100)})`);
         selfImprovementEngine.logToolCall({ toolName: tc.name, input: tc.args, timestamp: Date.now() });
 
@@ -2022,6 +2038,8 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
 
       const toolResults = await Promise.all(toolPromises);
       for (const { tc, trimmed } of toolResults) {
+        if (tc.name === 'read_file' || tc.name === 'search_files') readCount++;
+        if (tc.name === 'patch' || tc.name === 'write_file') editCount++;
         messages.push({ role: 'tool', tool_call_id: tc.id || tc.name, content: trimmed });
       }
 
@@ -2029,8 +2047,8 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
       const systemMsg = messages[0];
       const userMsg = messages.find(m => m.role === 'user');
       const tail = messages.slice(1);
-      if (tail.length > 6) {
-        const trimmedTail = tail.slice(-6);
+      if (tail.length > 4) {
+        const trimmedTail = tail.slice(-4);
         // Always keep the user message
         if (userMsg && !trimmedTail.some(m => m.role === 'user')) {
           trimmedTail.unshift(userMsg);
