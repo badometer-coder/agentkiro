@@ -2194,11 +2194,8 @@ bot.command('memory', (ctx) => {
 // Providers command - show live provider status
 bot.command('providers', (ctx) => {
   const stats = llmProvider.getStats();
-  const lines = stats.providers.map((p, i) => {
-    const isDead = stats.deadProviders?.includes(p.replace(' (DEAD)', ''));
-    return `${isDead ? '💀' : '✅'} ${p}`;
-  });
-  ctx.reply(`🤖 LLM Providers (${stats.aliveProviders || stats.totalProviders} alive)\n\n${lines.join('\n')}`);
+  const lines = stats.providers.map(p => `${p.includes('(DEAD)') ? '💀' : '✅'} ${p}`);
+  ctx.reply(`🤖 LLM Providers (${stats.aliveProviders}/${stats.totalProviders} alive)\n\n${lines.join('\n')}`);
 });
 
 // Debug: Log ALL updates
