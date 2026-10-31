@@ -2055,13 +2055,14 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
             console.log(`🎯 Target file locked: ${targetFile}`);
           } else if (targetFile && tc.args.path !== targetFile && editCount === 0 && !isAppRename) {
           // Don't read other files once target is locked
-          if (targetFile && tc.args.path !== targetFile && editCount === 0) {
+          if (targetFile && tc.args.path !== targetFile && editCount === 0 && !isAppRename) {
             const userMsgLower = (messages.find(m => m.role === 'user')?.content || '').toLowerCase();
-            const isUIFix = userMsgLower.includes('header') || userMsgLower.includes('top') || userMsgLower.includes('down') || userMsgLower.includes('spacing') || userMsgLower.includes('safe area');
-            if (isUIFix) {
+            const isUIFix = userMsgLower.includes('header') || userMsgLower.includes('top') || userMsgLower.includes('down') || userMsgLower.includes('spacing') || userMsgLower.includes('safe area') || userMsgLower.includes('way down');
+            if (isUIFix && !(userMsgLower.includes('yes') && userMsgLower.length < 10)) {
               console.log(`🔒 Blocking read of ${tc.args.path} - target locked to ${targetFile}`);
               return { tc, trimmed: `❌ ACTION LOCK: Focus on ${targetFile}. Use patch to fix it.` };
             }
+          }
           }
           }
           if (readFilesThisTurn.has(cacheKey)) {
