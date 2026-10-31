@@ -1985,15 +1985,22 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
           const userMsgLower = (messages.find(m => m.role === 'user')?.content || '').toLowerCase();
           const isUIFix = (userMsgLower.includes('header') || userMsgLower.includes('top') || userMsgLower.includes('down') || userMsgLower.includes('spacing') || userMsgLower.includes('safe area') || userMsgLower.includes('way down')) && !(userMsgLower.includes('app name') || userMsgLower.includes('rename') || userMsgLower.includes('change') && userMsgLower.includes('name'));
           const isAppRename = userMsgLower.includes('app name') || (userMsgLower.includes('rename') && userMsgLower.includes('name')) || (userMsgLower.includes('change') && userMsgLower.includes('name'));
+          const isHomeOnlyRename = isAppRename && userMsgLower.includes('home screen');
           if (isUIFix && !isAppRename) {
             console.log(`🔒 ACTION LOCK - must edit ${targetFile}, blocking further reads`);
             messages.push({ role: 'user', content: `[SYSTEM] ACTION LOCK ENGAGED. You have identified ${targetFile} needs fixing. STOP reading other files. Use patch on ${targetFile} NOW.` });
             result.toolCalls = result.toolCalls.filter(tc => tc.name === 'patch' || tc.name === 'write_file');
-          } else if (isAppRename && targetFile && (targetFile === 'app.json' || targetFile.includes('app.') || targetFile === 'package.json')) {
+          } else if (isAppRename && !isHomeOnlyRename && targetFile && (targetFile === 'app.json' || targetFile.includes('app.') || targetFile === 'package.json')) {
             console.log(`🔒 ACTION LOCK - must edit ${targetFile}`);
             messages.push({ role: 'user', content: `[SYSTEM] ACTION LOCK ENGAGED. Edit ${targetFile} to change name. Use patch NOW.` });
             result.toolCalls = result.toolCalls.filter(tc => tc.name === 'patch' || tc.name === 'write_file');
+          } else if (isHomeOnlyRename && targetFile && targetFile.includes('HomeScreen')) {
+            console.log(`🔒 ACTION LOCK - must edit ${targetFile}`);
+            messages.push({ role: 'user', content: `[SYSTEM] ACTION LOCK ENGAGED. Edit ${targetFile} only. Use patch NOW.` });
+            result.toolCalls = result.toolCalls.filter(tc => tc.name === 'patch' || tc.name === 'write_file');
           }
+        }
+      }
           // For vague "yes please" etc, don't lock aggressively
         }
       }
