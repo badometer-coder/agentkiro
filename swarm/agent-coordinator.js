@@ -1985,11 +1985,19 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
           // Only lock for header/UI/spacing issues
           const userMsgLower = (messages.find(m => m.role === 'user')?.content || '').toLowerCase();
           const isUIFix = userMsgLower.includes('header') || userMsgLower.includes('top') || userMsgLower.includes('down') || userMsgLower.includes('spacing') || userMsgLower.includes('safe area') || userMsgLower.includes('way down');
-          if (isUIFix) {
+          const isAppRename = userMsgLower.includes('app name') || userMsgLower.includes('rename') && userMsgLower.includes('name');
+          if (isUIFix && !isAppRename) {
             console.log(`🔒 ACTION LOCK - must edit ${targetFile}, blocking further reads`);
             messages.push({ role: 'user', content: `[SYSTEM] ACTION LOCK ENGAGED. You have identified ${targetFile} needs fixing. STOP reading other files. Use patch on ${targetFile} NOW.` });
             result.toolCalls = result.toolCalls.filter(tc => tc.name === 'patch' || tc.name === 'write_file');
           }
+          if (isAppRename && targetFile && (targetFile === 'app.json' || targetFile.includes('app.'))) {
+            console.log(`🔒 ACTION LOCK - must edit ${targetFile}`);
+            messages.push({ role: 'user', content: `[SYSTEM] ACTION LOCK ENGAGED. Edit ${targetFile} to change name. Use patch NOW.` });
+            result.toolCalls = result.toolCalls.filter(tc => tc.name === 'patch' || tc.name === 'write_file');
+          }
+        }
+      }
         }
       }
 
