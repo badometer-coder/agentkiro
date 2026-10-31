@@ -1958,6 +1958,7 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
     let editCount = 0;
     let targetFile = null;
     let targetReadRound = -1;
+    let workingMemory = {}; // Hermes-style: summarize what we've learned about files
 
     // Always start from the best provider (Gemini) — don't inherit rotation state from previous turn
     llmProvider.resetToFirst();
@@ -2026,7 +2027,10 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
             toolResult = `[Already read this turn] ${readFilesThisTurn.get(cacheKey)}`;
           } else {
             toolResult = await agentTools.executeTool(tc.name, tc.args);
-            if (!(toolResult || '').startsWith('❌')) readFilesThisTurn.set(cacheKey, toolResult);
+            if (result.text) {
+            workingMemory[tc.args.path] = result.text.substring(0, 400).replace(/\n+/g, ' ').trim();
+            console.log(`🧠 Working memory: ${tc.args.path}`);
+          }
           }
         } else {
           toolResult = await agentTools.executeTool(tc.name, tc.args);
@@ -2056,7 +2060,7 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
         messages.push({ role: 'tool', tool_call_id: tc.id || tc.name, content: trimmed });
       }
 
-      // Trim old tool results to stay under token limits
+      // Trim old tool results to stay under token limits - Hermes style summarization
       const systemMsg = messages[0];
       const userMsg = messages.find(m => m.role === 'user');
       const tail = messages.slice(1);
@@ -2066,10 +2070,10 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
         if (userMsg && !trimmedTail.some(m => m.role === 'user')) {
           trimmedTail.unshift(userMsg);
         }
-        // Truncate long tool results to save tokens but keep them
+        // Summarize old reads instead of dumping raw content
         const compacted = trimmedTail.map(m => {
-          if (m.role === 'tool' && m.content && m.content.length > 1000) {
-            return { ...m, content: m.content.substring(0, 1000) + '\n...(truncated)' };
+          if (m.role === 'tool' && m.content && m.content.length > 800) {
+            return { ...m, content: m.content.substring(0, 800) + '\n...[summarized]' };
           }
           return m;
         });
@@ -2083,7 +2087,11 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
       await new Promise(r => setTimeout(r, 2000));
     } // end while loop
 
-    if (!finalReply) finalReply = 'Task complete. Check the app — changes have been pushed to GitHub.';
+    // Add working memory summary to context
+    if (Object.keys(workingMemory).length > 0) {
+      const summary = Object.entries(workingMemory).map(([k,v]) => `- ${k}: ${v}`).join('\n');
+      messages[0].content += `\n\n# Working Memory (what I know)\n${summary}`;
+    }
 
     // Remove any leaked tool syntax just in case
     finalReply = finalReply.replace(/\[TOOL:[^\]]*\]/g, '').trim() || finalReply;
