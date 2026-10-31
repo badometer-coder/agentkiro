@@ -1959,6 +1959,9 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
     let targetFile = null;
     let targetReadRound = -1;
     let workingMemory = {}; // Hermes-style: summarize what we've learned about files
+    let targetFileLocked = false;
+    let filesReadSinceLock = new Set();
+    let actionLocked = false; // Once target identified, force edit after read
 
     // Always start from the best provider (Gemini) — don't inherit rotation state from previous turn
     llmProvider.resetToFirst();
@@ -1973,6 +1976,17 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
       }
 
         console.log(`🔧 Round ${round + 1}: ${result.toolCalls.length} tool call(s)`);
+
+      // Action lock - if we've identified target file and read it, force edit
+      if (targetFile && editCount === 0 && targetReadRound >= 0 && round - targetReadRound >= 2) {
+        const hasReads = result.toolCalls.some(tc => tc.name === 'read_file' || tc.name === 'search_files');
+        const hasEdits = result.toolCalls.some(tc => tc.name === 'patch' || tc.name === 'write_file');
+        if (hasReads && !hasEdits) {
+          console.log(`🔒 ACTION LOCK - must edit ${targetFile}, blocking further reads`);
+          messages.push({ role: 'user', content: `[SYSTEM] ACTION LOCK ENGAGED. You have identified ${targetFile} needs fixing. STOP reading other files. Use patch on ${targetFile} NOW.` });
+          result.toolCalls = result.toolCalls.filter(tc => tc.name === 'patch' || tc.name === 'write_file');
+        }
+      }
 
         // Hermes-style: enforce action bias
         const hasReads = result.toolCalls.some(tc => tc.name === 'read_file' || tc.name === 'search_files');
@@ -2016,11 +2030,14 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
         let toolResult;
         if (tc.name === 'read_file' && tc.args?.path) {
           const cacheKey = `${tc.args.path}:${tc.args.start_line || 0}`;
-          // Set target file for edit budget
-          if (!targetFile && (tc.args.path.includes('ProximityHeader') || tc.args.path.includes('HomeScreen') || tc.args.path.includes('header'))) {
+          if (!targetFile && (tc.args.path.includes('ProximityHeader') || tc.args.path.includes('HomeScreen') || tc.args.path.includes('header') || tc.args.path.includes('safe') || tc.args.path.includes('style'))) {
             targetFile = tc.args.path;
             targetReadRound = round;
-            console.log(`🎯 Target file set: ${targetFile}`);
+            console.log(`🎯 Target file locked: ${targetFile}`);
+          } else if (targetFile && tc.args.path !== targetFile && editCount === 0) {
+            // Don't read other files once target is locked
+            console.log(`🔒 Blocking read of ${tc.args.path} - target locked to ${targetFile}`);
+            return { tc, trimmed: `❌ ACTION LOCK: Focus on ${targetFile}. Use patch to fix it.` };
           }
           if (readFilesThisTurn.has(cacheKey)) {
             console.log(`  ↩ cache hit: ${tc.args.path}`);
