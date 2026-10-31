@@ -177,7 +177,7 @@ class MultiLLMProvider {
         parts: [{ text: m.content }],
       }));
       const model = provider.client.getGenerativeModel({
-        model: 'gemini-2.5-flash-lite-preview-06-17',
+        model: 'gemini-3.1-flash',
         generationConfig: { maxOutputTokens: 400, temperature: options.temperature ?? 0.3 },
         ...(systemPrompt ? { systemInstruction: { parts: [{ text: systemPrompt }] } } : {}),
       });
@@ -232,7 +232,7 @@ class MultiLLMProvider {
       }));
 
       const model = provider.client.getGenerativeModel({
-        model: 'gemini-2.5-flash-lite-preview-06-17',
+        model: 'gemini-3.1-flash',
         generationConfig: { maxOutputTokens: 800, temperature: options.temperature ?? 0.3 },
         tools: [{ functionDeclarations }],
         ...(systemPrompt ? { systemInstruction: { parts: [{ text: systemPrompt }] } } : {}),
