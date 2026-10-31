@@ -1998,10 +1998,8 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
           }
         }
       }
-        }
-      }
 
-        // Hermes-style: enforce action bias
+      // Hermes-style: enforce action bias
         const hasReads = result.toolCalls.some(tc => tc.name === 'read_file' || tc.name === 'search_files');
         const hasEdits = result.toolCalls.some(tc => tc.name === 'patch' || tc.name === 'write_file');
         if (hasReads && !hasEdits && readCount >= 2 && round >= 2) {
