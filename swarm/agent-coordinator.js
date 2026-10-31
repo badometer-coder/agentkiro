@@ -1472,7 +1472,12 @@ bot.on('text', (ctx) => {
   // Run handler async so telegraf doesn't timeout waiting for long tasks
   handleMessage(ctx).catch(err => {
     console.error('❌ Handler error:', err.message);
-    ctx.reply(`Error: ${err.message}`).catch(() => {});
+    const msg = err.message || '';
+    if (msg.includes('All providers failed') || msg.includes('quota') || msg.includes('rate limit')) {
+      ctx.reply(`⏳ All AI providers are rate limited right now. Quotas reset at midnight. Try again later.`).catch(() => {});
+    } else {
+      ctx.reply(`Error: ${err.message}`).catch(() => {});
+    }
   });
 });
 
