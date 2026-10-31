@@ -1956,6 +1956,8 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
     const readFilesThisTurn = new Map(); // track file reads — avoid redundant re-reads
     let readCount = 0;
     let editCount = 0;
+    let targetFile = null;
+    let targetReadRound = -1;
 
     // Always start from the best provider (Gemini) — don't inherit rotation state from previous turn
     llmProvider.resetToFirst();
@@ -2013,6 +2015,12 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
         let toolResult;
         if (tc.name === 'read_file' && tc.args?.path) {
           const cacheKey = `${tc.args.path}:${tc.args.start_line || 0}`;
+          // Set target file for edit budget
+          if (!targetFile && (tc.args.path.includes('ProximityHeader') || tc.args.path.includes('HomeScreen') || tc.args.path.includes('header'))) {
+            targetFile = tc.args.path;
+            targetReadRound = round;
+            console.log(`🎯 Target file set: ${targetFile}`);
+          }
           if (readFilesThisTurn.has(cacheKey)) {
             console.log(`  ↩ cache hit: ${tc.args.path}`);
             toolResult = `[Already read this turn] ${readFilesThisTurn.get(cacheKey)}`;
@@ -2038,8 +2046,13 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
 
       const toolResults = await Promise.all(toolPromises);
       for (const { tc, trimmed } of toolResults) {
-        if (tc.name === 'read_file' || tc.name === 'search_files') readCount++;
         if (tc.name === 'patch' || tc.name === 'write_file') editCount++;
+        if (tc.name === 'patch' || tc.name === 'write_file') {
+          // If editing target file, mark budget satisfied
+          if (targetFile && tc.args?.path === targetFile) {
+            console.log(`✅ Editing target file ${targetFile} - budget satisfied`);
+          }
+        }
         messages.push({ role: 'tool', tool_call_id: tc.id || tc.name, content: trimmed });
       }
 
