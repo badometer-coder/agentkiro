@@ -630,7 +630,7 @@ async function executeTask(taskDescription, ctx = null, noCommit = false) {
 
     // === CLARIFY VAGUE REQUESTS EARLY ===
     const taskLower = taskDescription.toLowerCase();
-    const vaguePatterns = ['sign in with google is not working', 'google sign in not working', 'login not working', 'sign in not working', 'auth not working', 'login with google it is not responding'];
+    const vaguePatterns = ['sign in with google is not working', 'google sign in not working', 'login not working', 'sign in not working', 'auth not working', 'login with google it is not responding', 'login with google it is not working'];
     const isVagueAuth = vaguePatterns.some(p => taskLower.includes(p)) && !taskLower.includes('.tsx') && !taskLower.includes('.ts') && !taskLower.includes('error');
     if (isVagueAuth && ctx) {
       await ctx.reply(`Which screen/component is failing? Can you share the exact error message or a screenshot?`);
