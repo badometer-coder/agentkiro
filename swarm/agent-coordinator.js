@@ -1572,6 +1572,7 @@ async function handleMessage(ctx) {
     }
     if (msg.includes('network request failed') || msg.includes('login failed') || 
         msg.includes('why is') || msg.includes('what is') || msg.includes('why does') ||
+        msg.includes('what should') || msg.includes('what does') ||
         (msg.includes('not working') && !msg.match(/fix|change|update|add|remove/i))) {
       // These are diagnostic questions — answer from knowledge, don't read code
       const quickMessages = [
