@@ -1514,6 +1514,13 @@ async function handleMessage(ctx) {
     if (raw.startsWith('/') && raw !== '/providers') return; // allow /providers through
     console.log(`\n💬 User: "${raw}"`);
 
+    // IMMEDIATE CLARIFY for vague auth issues
+    if ((msg.includes('sign in with google') || (msg.includes('google') && msg.includes('sign') && msg.includes('not working'))) && 
+        !msg.includes('error:') && !msg.includes('stack') && !msg.match(/\.(tsx|ts|js|jsx)/)) {
+      await ctx.reply('Which screen/component is failing? Can you share the exact error message or a screenshot?');
+      return;
+    }
+
     // Deduplicate — ignore same message within 30 seconds
     const taskKey = raw.substring(0, 100);
     if (taskKey === lastTaskKey && Date.now() - lastTaskTime < 30000) {
