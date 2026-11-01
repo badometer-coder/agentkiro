@@ -156,6 +156,7 @@ export class AgentTools {
       }
       
       let updated = content.replace(oldString, newString);
+      if (updated === content) return `❌ old_string not found in ${filePath} (after replace attempt).`;
 
       // Auto-fix: Replace SafeAreaView from 'react-native' with 'react-native-safe-area-context'
       // SafeAreaView from react-native is a no-op on Android — must use react-native-safe-area-context
@@ -241,6 +242,16 @@ export class AgentTools {
       await this.githubPut(filePath, updated, `AI: patch ${filePath}`, data.sha);
       return `✅ Patched and pushed to GitHub: ${filePath}`;
     } catch (err) {
+      // If 409 conflict, try to get fresh SHA and retry once
+      if (err.message && err.message.includes('409')) {
+        try {
+          const fresh = await this.githubGet(filePath);
+          await this.githubPut(filePath, updated, `AI: patch ${filePath}`, fresh.sha);
+          return `✅ Patched and pushed to GitHub: ${filePath}`;
+        } catch (e2) {
+          return `❌ patch failed: ${e2.message}`;
+        }
+      }
       return `❌ patch failed: ${err.message}`;
     }
   }
