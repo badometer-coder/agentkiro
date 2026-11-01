@@ -487,14 +487,16 @@ async function readProjectFiles(appPath, taskDescription = '') {
     'src/screens/auth/ProfileSetupScreen.tsx',
     'src/screens/main/ProximityFeedScreen.tsx',
     'src/screens/main/ChatThreadScreen.tsx',
+    'src/context/AuthContext.tsx',
+    'src/hooks/auth/useAuth.ts',
   ];
 
   const task = taskDescription.toLowerCase();
   let filesToRead = [];
 
   // Pick only relevant files based on task keywords
-  if (task.includes('login') || task.includes('auth') || task.includes('password') || task.includes('username') || task.includes('sign')) {
-    filesToRead = ['src/screens/auth/LoginScreen.tsx', 'src/hooks/auth/useAuth.ts', 'src/constants/theme.ts'];
+  if (task.includes('google') || task.includes('login') || task.includes('auth') || task.includes('password') || task.includes('username') || task.includes('sign')) {
+    filesToRead = ['src/screens/auth/LoginScreen.tsx', 'src/context/AuthContext.tsx', 'src/hooks/auth/useAuth.ts', 'src/constants/theme.ts'];
   } else if (task.includes('profile') || task.includes('setup')) {
     filesToRead = ['src/screens/auth/ProfileSetupScreen.tsx', 'src/constants/theme.ts'];
   } else if (task.includes('chat') || task.includes('message')) {
