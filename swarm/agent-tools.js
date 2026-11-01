@@ -5,6 +5,7 @@
 
 import WebSearch from './web-search.js';
 import { execSync } from 'child_process';
+import fs from 'fs';
 
 const GITHUB_REPO  = 'badometer-coder/proximity-app';
 const GITHUB_BRANCH = 'main';
@@ -44,8 +45,46 @@ export class AgentTools {
     return res.json();
   }
 
+  async searchLocal(basePath, query) {
+    try {
+      const { execSync } = await import('child_process');
+      // Use ripgrep if available, else grep
+      try {
+        const out = execSync(`rg -n --no-heading --max-count 5 "${query.replace(/"/g, '\\"')}" "${basePath}" 2>&1 | head -60`, { encoding: 'utf-8', timeout: 15000 });
+        if (out && !out.includes('No files were searched')) {
+          return `🔍 Local search results for "${query}" in ${basePath}:\n\n${out}`;
+        }
+      } catch(e) {}
+      try {
+        const out = execSync(`grep -rn "${query.replace(/"/g, '\\"')}" "${basePath}" 2>&1 | head -60`, { encoding: 'utf-8', timeout: 15000 });
+        if (out && !out.includes('No such file')) {
+          return `🔍 Local search results for "${query}" in ${basePath}:\n\n${out}`;
+        }
+      } catch(e) {}
+    } catch(e) {}
+    return `🔍 No results found for "${query}" in ${basePath}`;
+  }
+
   async searchFiles(query) {
-    if (!this.token) return '❌ GITHUB_TOKEN not set';
+    const localPaths = [
+      this.env.PROJECT_PATH,
+      process.env.PROJECT_PATH,
+      '/Users/owner/proximity-app-final',
+      '/opt/render/project/proximity-app',
+      '/opt/render/project/src',
+      process.cwd().replace('/swarm','')
+    ].filter(Boolean);
+    for (const base of localPaths) {
+      if (fs.existsSync(base)) {
+        try {
+          const results = await this.searchLocal(base, query);
+          if (results && !results.includes('No results found')) {
+            return results;
+          }
+        } catch(e) {}
+      }
+    }
+    if (!this.token) return '❌ GITHUB_TOKEN not set and no local files found';
     try {
       const fetch = (await import('node-fetch')).default;
       // Search code in repo
