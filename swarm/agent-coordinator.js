@@ -2183,8 +2183,8 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
     ];
 
     // Native function calling loop — like Hermes
-    // Add clarification rule
-    systemPrompt += `\n\n# Clarify when confused\nIf you cannot confidently identify which file to edit or what the exact change is after 1-2 reads/searches, ASK THE USER a specific direct question. Do not guess, loop reading files, or invent assumptions. Examples: "Which file should I edit for X?" or "Do you mean Y or Z?"\n\n# CRITICAL: Clarify vague requests\nIf the request is vague like "X is not working", "fix bug", or lacks file names/specific details/error messages, you MUST ask for clarification BEFORE exploring. Ask 1-2 targeted questions like "Which screen/component is failing?" or "Can you share the exact error message?" Do NOT start reading multiple files to guess.\n`;
+    // Add reasoning and clarification rules
+    systemPrompt += `\n\n# When to clarify vs when to reason\nIf truly vague request with NO specifics (just "fix bug", "not working") → ask for clarification.\n\nBUT if the request mentions a specific feature/button/screen (like "Google login button not responding"), DO NOT ask first. Instead:\n1. Read relevant files (LoginScreen, AuthContext, etc.)\n2. REASON about what you read: Does the button exist? Does it call a function? Does that function return data? Is the data being used?\n3. If you spot the bug → patch it\n4. If unclear → web_search for the pattern\n5. Only if blocked → ask user\n\nExample: "Google login not responding" → read LoginScreen + AuthContext → notice signInWithOAuth returns URL but nothing opens it → patch to add Linking.openURL(data.url)\n`;
 
     const messages = [{ role: 'system', content: systemPrompt }, ...conversationHistory];
     if (messages.filter(m => m.role === 'user').length === 0 && raw) {
