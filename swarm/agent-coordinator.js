@@ -113,9 +113,10 @@ NAVIGATION: Expo Router (file-based routing)
 let taskQueue = [];
 let currentTask = null;
 let taskLog = [];
-let lastTaskKey = '';      // prevent duplicate task runs
+let lastTaskKey = '';
 let lastTaskTime = 0;
-let stopRequested = false; // Global stop flag — set by "stop" command
+let stopRequested = false;
+const recentToolCalls = []; // Hermes-style loop detection: [{name, args, result}, ...]
 
 // === CONVERSATION PERSISTENCE (Hermes-style: save to disk, load on startup) ===
 const conversationFile = path.join(__dirname, 'memory', 'conversation.json');
@@ -2222,6 +2223,18 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
 
         console.log(`🔧 Round ${round + 1}: ${result.toolCalls.length} tool call(s)`);
 
+        // Hermes-style loop detection - check for A,B,A,B cycles
+        if (recentToolCalls.length >= 4) {
+          const last4 = recentToolCalls.slice(-4);
+          if (last4[0].name === last4[2].name && last4[0].args === last4[2].args &&
+              last4[1].name === last4[3].name && last4[1].args === last4[3].args &&
+              last4[0].name !== last4[1].name) {
+            console.log(`⚠️  Agent stuck in A,B,A,B loop (${last4[0].name}, ${last4[1].name}) — bailing out`);
+            finalReply = "I'm repeating the same tool calls. Can you share more details - error message, screenshot, or which specific file to check?";
+            break;
+          }
+        }
+
         // Hermes-style loop detection - track identical tool calls
         const toolSig = JSON.stringify(result.toolCalls.map(tc => ({ name: tc.name, path: tc.args?.path || '', query: tc.args?.query || '', old_string: tc.args?.old_string?.substring(0, 50) || '' })));
         if (toolSig === lastToolCallSignature) {
@@ -2290,6 +2303,11 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
       for (const { tc, trimmed } of toolResults) {
         if (tc.name === 'read_file' || tc.name === 'search_files') readCount++;
         if (tc.name === 'patch' || tc.name === 'write_file') editCount++;
+        
+        // Track for Hermes-style loop detection
+        recentToolCalls.push({ name: tc.name, args: JSON.stringify(tc.args), result: trimmed.substring(0, 150) });
+        if (recentToolCalls.length > 20) recentToolCalls.shift();
+        
         messages.push({ role: 'tool', tool_call_id: tc.id || tc.name, content: trimmed });
       }
 
