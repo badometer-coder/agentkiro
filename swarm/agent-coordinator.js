@@ -610,6 +610,15 @@ async function executeTask(taskDescription, ctx = null, noCommit = false) {
     const currentFiles = await readProjectFiles(appPath, taskDescription);
     console.log(`📂 Read existing project files for context`);
 
+    // === CLARIFY VAGUE REQUESTS EARLY ===
+    const taskLower = taskDescription.toLowerCase();
+    const vaguePatterns = ['sign in with google is not working', 'google sign in not working', 'login not working', 'sign in not working', 'auth not working'];
+    const isVagueAuth = vaguePatterns.some(p => taskLower.includes(p)) && !taskLower.includes('.tsx') && !taskLower.includes('.ts') && !taskLower.includes('error');
+    if (isVagueAuth && ctx) {
+      await ctx.reply(`Which screen/component is failing? Can you share the exact error message or logs?`);
+      return { success: false, skipped: true, reason: 'clarification_needed' };
+    }
+
     // === WEB SEARCH: Extract API keywords from task and search for real documentation ===
     let webSearchContext = '';
     const searchKeywords = [
@@ -619,8 +628,8 @@ async function executeTask(taskDescription, ctx = null, noCommit = false) {
     ];
 
     // Extract relevant keywords from task
-    const taskLower = taskDescription.toLowerCase();
-    const relevantKeywords = searchKeywords.filter(k => taskLower.includes(k.toLowerCase()));
+    const taskLower2 = taskDescription.toLowerCase();
+    const relevantKeywords = searchKeywords.filter(k => taskLower2.includes(k.toLowerCase()));
 
     if (relevantKeywords.length > 0) {
       console.log(`🔍 Searching web for API documentation on: ${relevantKeywords.slice(0, 3).join(', ')}`);
