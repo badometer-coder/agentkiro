@@ -1952,7 +1952,7 @@ ${fileErrors}`;
     const currentProvider = llmProvider.getCurrentProvider?.()?.name || '';
     const skillsContext = currentProvider.includes('Gemini') ? skillsManager.loadSkillsForContext(raw) : '';
 
-    const systemPrompt = `You are Fag, an AI coding agent for the Proximity social app. You communicate naturally and conversationally.
+    let systemPrompt = `You are Fag, an AI coding agent for the Proximity social app. You communicate naturally and conversationally.
 
 If the requested change already exists in the code, say "Already done: <file> = <value>" and stop immediately without calling tools.`;
 
