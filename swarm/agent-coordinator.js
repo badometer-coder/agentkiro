@@ -2255,31 +2255,31 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
         const hasEdits = result.toolCalls.some(tc => tc.name === 'patch' || tc.name === 'write_file');
         if (hasReads && !hasEdits && readCount >= 2 && round >= 2) {
           console.log(`⚡ Action bias: removing read tools after ${readCount} reads`);
-          // Filter out read tools — send only patch/write_file/web_search to the model
+          // Make one more call with only edit tools available
           const editOnlyTools = toolSchemas.filter(t => t.name !== 'read_file' && t.name !== 'search_files');
-          messages.push({ role: 'user', content: '[SYSTEM] You have read enough. read_file and search_files are now DISABLED. Your next call MUST be patch or write_file to make the change.' });
+          messages.push({ role: 'assistant', content: result.text || '', tool_calls: result.raw?.tool_calls });
+          // Add tool results from previous round
+          for (const tc of result.toolCalls) {
+            const res = await agentTools.executeToolCall(tc);
+            const trimmed = res.length > 3000 ? res.substring(0, 3000) + '\n...[trimmed]' : res;
+            if (tc.name === 'read_file' || tc.name === 'search_files') readCount++;
+            messages.push({ role: 'tool', tool_call_id: tc.id || tc.name, content: trimmed });
+            recentToolCalls.push({ name: tc.name, args: JSON.stringify(tc.args), result: trimmed.substring(0, 150) });
+            if (recentToolCalls.length > 20) recentToolCalls.shift();
+          }
+          messages.push({ role: 'user', content: '[SYSTEM] You have read enough. read_file and search_files are now DISABLED. Make the change NOW with patch or write_file.' });
+          // Call with filtered tools
           const result2 = await llmProvider.callLLMWithTools(messages, editOnlyTools, { temperature: 0.2 });
           if (!result2.toolCalls || result2.toolCalls.length === 0) {
             finalReply = result2.text || 'Done.';
             break;
           }
-          // Process the edit-only round
+          // Replace result with the edit-only result and continue normal flow
+          result.toolCalls = result2.toolCalls;
+          result.text = result2.text;
+          result.raw = result2.raw;
           round++;
           console.log(`🔧 Round ${round + 1}: ${result2.toolCalls.length} tool call(s) (edit-only mode)`);
-          const editCalls = result2.toolCalls.slice(0, 3);
-          const editPromises = editCalls.map(async (tc) => {
-            console.log(`  → ${tc.name}(${JSON.stringify(tc.args).substring(0, 100)})`);
-            const res = await tools.execute(tc.name, tc.args);
-            const trimmed = res.length > 3000 ? res.substring(0, 3000) + '\n...[trimmed]' : res;
-            return { tc, trimmed };
-          });
-          const editResults = await Promise.all(editPromises);
-          for (const { tc, trimmed } of editResults) {
-            if (tc.name === 'patch' || tc.name === 'write_file') editCount++;
-            messages.push({ role: 'tool', tool_call_id: tc.id || tc.name, content: trimmed });
-          }
-          messages.push({ role: 'assistant', content: result2.text || '', tool_calls: result2.raw?.tool_calls });
-          continue; // skip normal processing, continue loop
         }
         if (readCount >= 4 && editCount === 0 && round >= 3) {
           console.log(`⚠️ Hard action bias: ${readCount} reads, 0 edits — forcing exit`);
