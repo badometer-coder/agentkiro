@@ -1557,6 +1557,7 @@ async function handleMessage(ctx) {
       const path = await import('path');
       const { execSync } = await import('child_process');
       const appPath = process.env.PROJECT_PATH || '/Users/owner/proximity-app-final';
+      const projectId = 'c0435db0-4f3b-45ca-b909-45a544efdc7d';
       
       if (!fs.existsSync(path.join(appPath, 'eas.json'))) {
         const sources = ['/Users/owner/proximity-social-app/eas.json'];
@@ -1568,18 +1569,63 @@ async function handleMessage(ctx) {
           }
         }
       }
+
+      // EAS CLI also needs .eas/project-info.json in non-interactive mode
+      const easDir = path.join(appPath, '.eas');
+      try {
+        if (!fs.existsSync(easDir)) {
+          fs.mkdirSync(easDir, { recursive: true });
+        }
+        const projInfoPath = path.join(easDir, 'project-info.json');
+        if (!fs.existsSync(projInfoPath)) {
+          fs.writeFileSync(projInfoPath, JSON.stringify({ projectId }, null, 2));
+          await ctx.reply('✅ Created .eas/project-info.json');
+        } else {
+          try {
+            const existing = JSON.parse(fs.readFileSync(projInfoPath, 'utf-8'));
+            if (existing.projectId !== projectId) {
+              fs.writeFileSync(projInfoPath, JSON.stringify({ projectId }, null, 2));
+              await ctx.reply('✅ Updated .eas/project-info.json');
+            }
+          } catch (e) {
+            fs.writeFileSync(projInfoPath, JSON.stringify({ projectId }, null, 2));
+            await ctx.reply('✅ Fixed .eas/project-info.json');
+          }
+        }
+      } catch (e) {
+        console.log('Failed to create .eas/project-info.json:', e.message);
+      }
       
       try {
-        const output = execSync(`cd "${appPath}" && npx --yes eas-cli@latest init --id c0435db0-4f3b-45ca-b909-45a544efdc7d --non-interactive 2>&1`, {
+        const output = execSync(`cd "${appPath}" && npx --yes eas-cli@latest init --id ${projectId} --non-interactive --force 2>&1`, {
           encoding: 'utf-8',
-          timeout: 60000,
+          timeout: 120000,
         });
-        return ctx.reply(`✅ EAS initialized:\n\n${output.substring(0, 400)}`);
+        await ctx.reply(`✅ EAS initialized:\n\n${output.substring(0, 400)}`);
       } catch (err) {
         const out = String(err.stdout || err.stderr || err.message || '');
-        if (out.includes('already')) return ctx.reply('✅ EAS already configured.');
-        return ctx.reply(`⚠️ ${out.substring(0, 600)}`);
+        if (out.includes('already')) {
+          await ctx.reply('✅ EAS already configured.');
+        } else {
+          await ctx.reply(`⚠️ ${out.substring(0, 600)}`);
+        }
       }
+
+      // Retry the original update command if it was mentioned
+      if (msg.includes('eas update')) {
+        try {
+          await ctx.reply('🔄 Retrying eas update...');
+          const updateOut = execSync(`cd "${appPath}" && EAS_NO_VCS=1 npx --yes eas-cli@latest update --channel preview --message "AI: auto-fix" --non-interactive 2>&1`, {
+            encoding: 'utf-8',
+            timeout: 900000,
+          });
+          return ctx.reply(`✅ Update published:\n\n${updateOut.substring(0, 800)}`);
+        } catch (err2) {
+          const out2 = String(err2.stdout || err2.stderr || err2.message || '');
+          return ctx.reply(`⚠️ Update still failed:\n\n${out2.substring(0, 800)}`);
+        }
+      }
+      return;
     }
 
     // --- GREETINGS ---
