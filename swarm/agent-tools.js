@@ -113,7 +113,32 @@ export class AgentTools {
   // ── Tool implementations ───────────────────────────────────
 
   async readFile(filePath, startLine = 0, maxLines = 60) {
-    if (!this.token) return '❌ GITHUB_TOKEN not set';
+    const pathMod = await import('path');
+    const localPaths = [
+      this.env.PROJECT_PATH,
+      process.env.PROJECT_PATH,
+      '/Users/owner/proximity-app-final',
+      '/opt/render/project/proximity-app',
+      '/opt/render/project/src',
+      process.cwd().replace('/swarm','')
+    ].filter(Boolean);
+    for (const base of localPaths) {
+      const full = pathMod.join(base, filePath);
+      if (fs.existsSync(full)) {
+        try {
+          const content = fs.readFileSync(full, 'utf-8');
+          const lines = content.split('\n');
+          const total = lines.length;
+          const slice = lines.slice(startLine, startLine + maxLines);
+          const result = slice.map((l, i) => `${startLine + i + 1}|${l}`).join('\n');
+          const footer = (startLine + maxLines < total)
+            ? `\n\n[File has ${total} lines total. Use read_file with start_line=${startLine + maxLines} to read more.]`
+            : `\n\n[End of file — ${total} lines total]`;
+          return result + footer;
+        } catch(e) {}
+      }
+    }
+    if (!this.token) return '❌ GITHUB_TOKEN not set and no local files found';
     try {
       const data    = await this.githubGet(filePath);
       const content = Buffer.from(data.content, 'base64').toString('utf-8');
