@@ -1695,6 +1695,15 @@ async function handleMessage(ctx) {
       return ctx.reply(`Hey! 👋 I'm your dev agent building the Proximity app.\n\n📋 Queued: ${taskQueue.length} tasks\n✅ Done: ${taskLog.length} tasks\n\nJust tell me what to do naturally!`);
     }
 
+    // --- RESET ---
+    if (msg === 'reset' || msg === 'clear') {
+      conversationHistory = [];
+      taskQueue = [];
+      stopRequested = false;
+      saveConversationHistory();
+      return ctx.reply('✅ Reset. History cleared.');
+    }
+
     // --- STATUS ---
     if (msg.includes('status') || msg.includes('progress') || (msg.includes('how many') && msg.includes('task')) || msg.includes('done so far')) {
       const stats = memory.getStats();
