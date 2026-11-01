@@ -2107,16 +2107,22 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
 
     // Native function calling loop — like Hermes
     const messages = [{ role: 'system', content: systemPrompt }, ...conversationHistory];
+    if (messages.filter(m => m.role === 'user').length === 0 && raw) {
+      messages.push({ role: 'user', content: raw });
+    }
     let finalReply = '';
-    const MAX_ROUNDS = 20;
+    const MAX_ROUNDS = 15;
     let round = 0;
-    let lastToolCallJson = '';
-    let toolStuckCount = 0;
-    const readFilesThisTurn = new Map(); // track file reads — avoid redundant re-reads
+    let lastToolCallSignature = '';
+    let identicalCallCount = 0;
+    const readFilesThisTurn = new Map();
+    const toolCallHistory = [];
     let readCount = 0;
     let editCount = 0;
+    let consecutiveReads = 0;
+    let lastToolType = '';
 
-    // Always start from the best provider (Gemini) — don't inherit rotation state from previous turn
+    // Always start from the best provider
     llmProvider.resetToFirst();
 
     while (round < MAX_ROUNDS) {
@@ -2130,41 +2136,37 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
 
         console.log(`🔧 Round ${round + 1}: ${result.toolCalls.length} tool call(s)`);
 
+        // Hermes-style loop detection - track identical tool calls
+        const toolSig = JSON.stringify(result.toolCalls.map(tc => ({ name: tc.name, path: tc.args?.path, query: tc.args?.query })));
+        if (toolSig === lastToolCallSignature) {
+          identicalCallCount++;
+          if (identicalCallCount >= 2) {
+            console.log(`⚠️  Agent stuck in loop (identical calls ${identicalCallCount}x) — bailing out`);
+            finalReply = "Already done - no changes needed.";
+            break;
+          }
+          messages.push({ role: 'user', content: '[SYSTEM] You just made the exact same tool call. Stop looping. If you need to fix something, make a different action or provide your answer.' });
+        } else {
+          identicalCallCount = 0;
+          lastToolCallSignature = toolSig;
+        }
+
         // Hermes-style: enforce action bias
         const hasReads = result.toolCalls.some(tc => tc.name === 'read_file' || tc.name === 'search_files');
         const hasEdits = result.toolCalls.some(tc => tc.name === 'patch' || tc.name === 'write_file');
         if (hasReads && !hasEdits && readCount >= 2 && round >= 2) {
-          // Force action - we've read enough
           console.log(`⚡ Action bias: forcing edit after ${readCount} reads`);
-          // Inject nudge into messages
-          messages.push({ role: 'user', content: '[SYSTEM] STOP READING. You have enough information. Make the fix now with patch or write_file. Do not read more files.' });
+          messages.push({ role: 'user', content: '[SYSTEM] STOP READING. Make the fix now with patch or write_file.' });
         }
-        if (readCount >= 3 && editCount === 0 && round >= 3) {
+        if (readCount >= 4 && editCount === 0 && round >= 4) {
           console.log(`⚡ Hard action bias: must edit now`);
-          messages.push({ role: 'user', content: '[SYSTEM] CRITICAL: You have read ${readCount} files with ZERO edits. You MUST call patch or write_file on your next action. No more reads.' });
+          messages.push({ role: 'user', content: '[SYSTEM] CRITICAL: You have read ${readCount} files with ZERO edits. Make a change NOW or explain what you found.' });
         }
-
-        // Check if agent is stuck (calling same tool with same params AND the result failed)
-        // Stuck detection: compare by tool name + file path (ignore start_line differences)
-      const toolCallJson = JSON.stringify(result.toolCalls.map(tc => ({ name: tc.name, path: tc.args?.path || tc.args?.query || '' })));
-      if (toolCallJson === lastToolCallJson) {
-        toolStuckCount++;
-        if (toolStuckCount >= 3) {
-          console.log(`⚠️  Agent stuck in loop (same tool+path ${toolStuckCount}x) — bailing out`);
-          finalReply = `Hmm, let me search for that.`;
-          break;
-        }
-      } else {
-        toolStuckCount = 0;
-        lastToolCallJson = toolCallJson;
-      }
 
       // Add assistant message with tool calls to conversation
       messages.push({ role: 'assistant', content: result.text || '', tool_calls: result.raw?.tool_calls });
 
-      // Execute tool calls in parallel (Hermes pattern — cuts multi-file tasks from 6 rounds to 2)
-      // Limit parallel reads like Hermes does - max 2
-      const callsToRun = result.toolCalls.slice(0, 2);
+      const callsToRun = result.toolCalls.slice(0, 3);
       const toolPromises = callsToRun.map(async (tc) => {
         console.log(`  → ${tc.name}(${JSON.stringify(tc.args).substring(0, 100)})`);
         selfImprovementEngine.logToolCall({ toolName: tc.name, input: tc.args, timestamp: Date.now() });
