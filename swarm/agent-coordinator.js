@@ -89,6 +89,24 @@ CURRENT THEME (src/constants/theme.ts):
 
 NAVIGATION: Expo Router (file-based routing)
 
+# Common React Native issues you should know
+
+## Google Sign-In "not responding"
+If user reports "Login with Google button not responding" or "nothing happens when I tap it":
+- The issue is ALWAYS in AuthContext.tsx → signInWithOAuth implementation
+- React Native needs expo-web-browser to open OAuth URLs: \`await WebBrowser.openAuthSessionAsync(data.url)\`
+- Without it, the OAuth URL is generated but never opened, so button appears dead
+- Fix: read AuthContext.tsx, find signInWithOAuth, check if it opens the URL with WebBrowser or Linking
+- If skipBrowserRedirect:true is used, that's the bug — it doesn't work on mobile
+
+## Profile/user data "not showing"
+- Check if useEffect has the right dependencies: [session?.user?.id]
+- Check if Supabase query uses .single() and handles the result correctly
+- Common typo: data.fullName vs data.full_name (snake_case in database)
+
+When user says "X is not working" or "not responding", they want you to FIX it, not ask more questions. Read the relevant files (max 3), identify the bug, and patch it.
+
+
 ✅ COMPLETED FEATURES:
 - Database setup with PostGIS
 - Authentication (Login/Signup)
