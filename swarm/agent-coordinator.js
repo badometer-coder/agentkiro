@@ -2196,6 +2196,9 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
             for (const key of readFilesThisTurn.keys()) {
               if (key.startsWith(tc.args.path + ':')) readFilesThisTurn.delete(key);
             }
+            // Reset loop counters on successful edit
+            identicalCallCount = 0;
+            lastToolCallSignature = '';
           }
         }
 
