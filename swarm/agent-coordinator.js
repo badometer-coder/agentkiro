@@ -1536,7 +1536,13 @@ async function handleMessage(ctx) {
     typingInterval = setInterval(restartTyping, 2000);
     console.log(`⌨️  Typing indicator started for chat ${ctx.chat.id}`);
 
-    // --- CLARIFY VAGUE BUG REPORTS ---
+    // ABSOLUTE LAST CHECK - clarify before anything else
+    if (msg.includes('sign in with google') && msg.includes('not working')) {
+      await ctx.reply('Which screen/component is failing? Can you share the exact error message or a screenshot?');
+      clearInterval(typingInterval);
+      typingInterval = null;
+      return;
+    }
     if ((msg.includes('not working') || msg.includes('broken')) && 
         !msg.includes('eas') && !msg.includes('git') && !msg.includes('.tsx') && !msg.includes('.ts') &&
         (msg.includes('sign in') || msg.includes('google') || msg.includes('login') || msg.includes('auth'))) {
