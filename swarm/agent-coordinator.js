@@ -2115,6 +2115,9 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
     ];
 
     // Native function calling loop — like Hermes
+    // Add clarification rule
+    systemPrompt += `\n\n# Clarify when confused\nIf you cannot confidently identify which file to edit or what the exact change is after 1-2 reads/searches, ASK THE USER a specific direct question. Do not guess, loop reading files, or invent assumptions. Examples: "Which file should I edit for X?" or "Do you mean Y or Z?"\n`;
+
     const messages = [{ role: 'system', content: systemPrompt }, ...conversationHistory];
     if (messages.filter(m => m.role === 'user').length === 0 && raw) {
       messages.push({ role: 'user', content: raw });
