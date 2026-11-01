@@ -630,10 +630,10 @@ async function executeTask(taskDescription, ctx = null, noCommit = false) {
 
     // === CLARIFY VAGUE REQUESTS EARLY ===
     const taskLower = taskDescription.toLowerCase();
-    const vaguePatterns = ['sign in with google is not working', 'google sign in not working', 'login not working', 'sign in not working', 'auth not working'];
+    const vaguePatterns = ['sign in with google is not working', 'google sign in not working', 'login not working', 'sign in not working', 'auth not working', 'login with google it is not responding'];
     const isVagueAuth = vaguePatterns.some(p => taskLower.includes(p)) && !taskLower.includes('.tsx') && !taskLower.includes('.ts') && !taskLower.includes('error');
     if (isVagueAuth && ctx) {
-      await ctx.reply(`Which screen/component is failing? Can you share the exact error message or logs?`);
+      await ctx.reply(`Which screen/component is failing? Can you share the exact error message or a screenshot?`);
       return { success: false, skipped: true, reason: 'clarification_needed' };
     }
 
@@ -2189,6 +2189,17 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
     // ABSOLUTE CLARIFY before tool loop
     if (raw.toLowerCase().includes('sign in with google') && raw.toLowerCase().includes('not working') && 
         !raw.toLowerCase().includes('error') && !raw.toLowerCase().match(/\.(tsx|ts|js|jsx)/)) {
+      if (ctx) {
+        try { await ctx.reply('Which screen/component is failing? Can you share the exact error message or a screenshot?'); } catch(e){}
+      }
+      clearInterval(typingInterval);
+      typingInterval = null;
+      if (selfImprovementEngine.sessionLog.length > 0) {
+        await selfImprovementEngine.endTask(raw.substring(0, 100), 'Asked for clarification - vague request', true).catch(()=>{});
+      }
+      return;
+    }
+    if (raw.toLowerCase().includes('login with google') && raw.toLowerCase().includes('not responding')) {
       if (ctx) {
         try { await ctx.reply('Which screen/component is failing? Can you share the exact error message or a screenshot?'); } catch(e){}
       }
