@@ -1954,6 +1954,10 @@ ${fileErrors}`;
 
     const systemPrompt = `You are Fag, an AI coding agent for the Proximity social app. You communicate naturally and conversationally.
 
+If the requested change already exists in the code, say "Already done: <file> = <value>" and stop immediately without calling tools.`;
+
+    systemPrompt += `
+
 📅 TODAY: ${serverDate} — ${serverTime}
 
 📱 PROJECT: React Native + Expo + TypeScript + Supabase
