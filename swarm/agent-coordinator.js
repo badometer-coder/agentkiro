@@ -1938,8 +1938,13 @@ ${fileErrors}`;
     // --- LLM handles everything else with NATIVE FUNCTION CALLING (like Hermes) ---
 
     // Add to conversation history
-    conversationHistory.push({ role: 'user', content: raw });
-    if (conversationHistory.length > 30) conversationHistory = conversationHistory.slice(-30);
+    // Clear history if stuck in apology loop
+    const lastFew = conversationHistory.slice(-6).map(m => m.content.toLowerCase()).join(' ');
+    if ((lastFew.match(/apolog|you're right|sorry for the confusion/g) || []).length >= 3) {
+      console.log('🧹 Clearing conversation history to break apology loop');
+      conversationHistory = [];
+      saveConversationHistory();
+    }
 
     console.log(`📜 History (${conversationHistory.length} entries):`);
     conversationHistory.slice(-4).forEach((m, i) => {
