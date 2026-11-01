@@ -2228,7 +2228,7 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
           identicalCallCount++;
           if (identicalCallCount >= 2) {
             console.log(`⚠️  Agent stuck in loop (identical calls ${identicalCallCount}x) — bailing out`);
-            finalReply = "Already done - no changes needed.";
+            finalReply = "I'm stuck in a loop. Can you share more details - error message, screenshot, or which file to look at?";
             break;
           }
           messages.push({ role: 'user', content: '[SYSTEM] You just made the exact same tool call again. STOP. Either provide your answer explaining the situation, or make a DIFFERENT action.' });
