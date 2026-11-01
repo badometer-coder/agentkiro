@@ -623,8 +623,8 @@ async function executeTask(taskDescription, ctx = null, noCommit = false) {
     // Also check common local paths
     const localAppPaths = [
       process.env.PROJECT_PATH,
-      '/opt/render/project/proximity-app',
-      '/opt/render/project/src',
+      '/Users/owner/proximity-app-final',
+      '/Users/owner/proximity-app-final',
       '/app',
       '/Users/owner/proximity-app-final'
     ].filter(Boolean);
@@ -1686,7 +1686,7 @@ async function handleMessage(ctx) {
       const repoPaths = [
         process.env.PROJECT_PATH || '/Users/owner/proximity-app-final',
         '/app',
-        '/opt/render/project/src',
+        '/Users/owner/proximity-app-final',
       ];
       // Also check cwd and its parent for .git
       try {
@@ -1808,7 +1808,7 @@ async function handleMessage(ctx) {
         msg.match(/^please fix/i)) {
       await ctx.reply('🔍 Checking for errors...');
       
-      const appPath = process.env.PROJECT_PATH || '/opt/render/project/proximity-app';
+      const appPath = process.env.PROJECT_PATH || '/Users/owner/proximity-app-final';
       const { execSync } = await import('child_process');
       
       // Make sure repo is cloned and up to date
@@ -2355,7 +2355,7 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
       // Handle commit/push requests directly without LLM code generation
       if (specificTask.toLowerCase().includes('commit') || specificTask.toLowerCase().includes('push')) {
         await ctx.reply(`📦 Committing and pushing...`);
-        const appPath = process.env.PROJECT_PATH || '/opt/render/project/proximity-app';
+        const appPath = process.env.PROJECT_PATH || '/Users/owner/proximity-app-final';
         const githubToken = process.env.GITHUB_TOKEN;
         try {
           const { execSync } = await import('child_process');
