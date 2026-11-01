@@ -2199,7 +2199,7 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
       }
       return;
     }
-    if (raw.toLowerCase().includes('login with google') && raw.toLowerCase().includes('not responding')) {
+    if (raw.toLowerCase().includes('login with google') && (raw.toLowerCase().includes('not responding') || raw.toLowerCase().includes('not working'))) {
       if (ctx) {
         try { await ctx.reply('Which screen/component is failing? Can you share the exact error message or a screenshot?'); } catch(e){}
       }
