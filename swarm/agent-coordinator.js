@@ -616,7 +616,7 @@ async function executeTask(taskDescription, ctx = null, noCommit = false) {
     const stats = llmProvider.getStats();
     console.log(`💻 Dev Agent: Executing task (Provider: ${stats.currentProvider})...`);
 
-    const appPath = process.env.PROJECT_PATH || '/opt/render/project/proximity-app';
+    const appPath = process.env.PROJECT_PATH || '/Users/owner/proximity-app-final';
     const currentFiles = await readProjectFiles(appPath, taskDescription);
     console.log(`📂 Read existing project files for context`);
 
