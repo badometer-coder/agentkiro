@@ -1529,7 +1529,15 @@ async function handleMessage(ctx) {
     typingInterval = setInterval(restartTyping, 2000);
     console.log(`⌨️  Typing indicator started for chat ${ctx.chat.id}`);
 
-    // --- NETWORK/CONFIG QUESTIONS — answer directly without tools ---
+    // --- CLARIFY VAGUE BUG REPORTS ---
+    if ((msg.includes('not working') || msg.includes('broken')) && 
+        !msg.includes('eas') && !msg.includes('git') && !msg.includes('.tsx') && !msg.includes('.ts') &&
+        (msg.includes('sign in') || msg.includes('google') || msg.includes('login') || msg.includes('auth'))) {
+      await ctx.reply('Which screen is this happening on? Can you share the exact error message or a screenshot?');
+      clearInterval(typingInterval);
+      typingInterval = null;
+      return;
+    }
     if (msg.includes('network request failed') || msg.includes('login failed') || 
         msg.includes('why is') || msg.includes('what is') || msg.includes('why does') ||
         (msg.includes('not working') && !msg.match(/fix|change|update|add|remove/i))) {
