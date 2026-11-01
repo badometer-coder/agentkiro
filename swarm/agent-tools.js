@@ -156,7 +156,50 @@ export class AgentTools {
   }
 
   async writeFile(filePath, content, message) {
-    if (!this.token) return '❌ GITHUB_TOKEN not set';
+    const pathMod = await import('path');
+    const localPaths = [
+      this.env.PROJECT_PATH,
+      process.env.PROJECT_PATH,
+      '/Users/owner/proximity-app-final',
+      '/opt/render/project/proximity-app',
+      '/opt/render/project/src',
+      process.cwd().replace('/swarm','')
+    ].filter(Boolean);
+    for (const base of localPaths) {
+      const full = pathMod.join(base, filePath);
+      const dir = pathMod.dirname(full);
+      try {
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+        }
+        let fileContent = content;
+        if (filePath.match(/\.(ts|tsx|js|jsx)$/)) {
+          fileContent = fileContent.replace(
+            /import\s+\{([^}]*)SafeAreaView([^}]*)\}\s+from\s+['"]react-native['"]/g,
+            (match, before, after) => {
+              const cleaned = (before + after).split(',').map(s => s.trim()).filter(s => s && s !== 'SafeAreaView');
+              return `import { ${cleaned.join(', ')} } from 'react-native'`;
+            }
+          );
+          if (fileContent.includes('<SafeAreaView') && !fileContent.includes("from 'react-native-safe-area-context'") && !fileContent.includes('from "react-native-safe-area-context"')) {
+            const lines = fileContent.split('\n');
+            let lastImportIdx = -1;
+            for (let i = 0; i < lines.length; i++) {
+              if (lines[i].trim().startsWith('import ')) lastImportIdx = i;
+            }
+            if (lastImportIdx >= 0) {
+              lines.splice(lastImportIdx + 1, 0, "import { SafeAreaView } from 'react-native-safe-area-context';");
+              fileContent = lines.join('\n');
+            }
+          }
+        }
+        fs.writeFileSync(full, fileContent, 'utf-8');
+        return `✅ Written locally: ${full}`;
+      } catch(e) {
+        // try next
+      }
+    }
+    if (!this.token) return '❌ GITHUB_TOKEN not set and no local path writable';
     try {
       let sha;
       try { sha = (await this.githubGet(filePath)).sha; } catch (_) {}
@@ -199,7 +242,42 @@ export class AgentTools {
   }
 
   async patchFile(filePath, oldString, newString) {
-    if (!this.token) return '❌ GITHUB_TOKEN not set';
+    const pathMod = await import('path');
+    const localPaths = [
+      this.env.PROJECT_PATH,
+      process.env.PROJECT_PATH,
+      '/Users/owner/proximity-app-final',
+      '/opt/render/project/proximity-app',
+      '/opt/render/project/src',
+      process.cwd().replace('/swarm','')
+    ].filter(Boolean);
+    for (const base of localPaths) {
+      const full = pathMod.join(base, filePath);
+      if (fs.existsSync(full)) {
+        try {
+          let content = fs.readFileSync(full, 'utf-8');
+          if (!content.includes(oldString)) {
+            // try fuzzy
+            const lines = content.split('\n');
+            const searchWords = oldString.split(/\s+/).filter(w => w.length > 3);
+            const matchingLines = [];
+            for (let i = 0; i < lines.length; i++) {
+              if (searchWords.some(w => lines[i].includes(w))) {
+                matchingLines.push(`Line ${i+1}: ${lines[i].substring(0, 120)}`);
+              }
+            }
+            if (matchingLines.length > 0) {
+              return `❌ patch_file: old_string not found exactly. Similar lines:\n${matchingLines.slice(0, 10).join('\n')}\n\nUse the exact whitespace from read_file.`;
+            }
+            return `❌ patch_file: old_string not found in ${filePath}`;
+          }
+          const newContent = content.split(oldString).join(newString);
+          fs.writeFileSync(full, newContent, 'utf-8');
+          return `✅ Patched locally: ${filePath}`;
+        } catch(e) {}
+      }
+    }
+    if (!this.token) return '❌ GITHUB_TOKEN not set and no local files found';
     try {
       const data    = await this.githubGet(filePath);
       const content = Buffer.from(data.content, 'base64').toString('utf-8');
