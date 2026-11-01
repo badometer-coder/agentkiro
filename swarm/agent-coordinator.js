@@ -12,6 +12,7 @@ import SelfImprovementEngine from './self-improvement-engine.js';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { startHealthServer, setCIErrorCallback } from './health-server.js';
+import { findAppRoot } from './find-app.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -616,17 +617,15 @@ async function executeTask(taskDescription, ctx = null, noCommit = false) {
     const stats = llmProvider.getStats();
     console.log(`💻 Dev Agent: Executing task (Provider: ${stats.currentProvider})...`);
 
-    const appPath = process.env.PROJECT_PATH || '/Users/owner/proximity-app-final';
+    const appPath = findAppRoot();
     const currentFiles = await readProjectFiles(appPath, taskDescription);
-    console.log(`📂 Read existing project files for context`);
+    console.log(`📂 Read existing project files for context (${appPath})`);
 
     // Also check common local paths
     const localAppPaths = [
+      appPath,
       process.env.PROJECT_PATH,
       '/Users/owner/proximity-app-final',
-      '/Users/owner/proximity-app-final',
-      '/app',
-      '/Users/owner/proximity-app-final'
     ].filter(Boolean);
 
     // === CLARIFY VAGUE REQUESTS EARLY ===
@@ -1606,7 +1605,7 @@ async function handleMessage(ctx) {
       const fs = await import('fs');
       const path = await import('path');
       const { execSync } = await import('child_process');
-      const appPath = process.env.PROJECT_PATH || '/Users/owner/proximity-app-final';
+      const appPath = findAppRoot();
       const projectId = 'c0435db0-4f3b-45ca-b909-45a544efdc7d';
       
       if (!fs.existsSync(path.join(appPath, 'eas.json'))) {
@@ -1685,7 +1684,7 @@ async function handleMessage(ctx) {
       const fs = await import('fs');
       const path = await import('path');
       const repoPaths = [
-        process.env.PROJECT_PATH || '/Users/owner/proximity-app-final',
+        findAppRoot(),
         '/app',
         '/Users/owner/proximity-app-final',
       ];
@@ -1723,7 +1722,7 @@ async function handleMessage(ctx) {
     if (msg.match(/^git\s+(push|add\s+commit|commit\s+push)/i) || msg === 'git push') {
       await ctx.reply('🔄 Pushing changes...');
       const { execSync } = await import('child_process');
-      const repoPaths = [process.env.PROJECT_PATH || '/Users/owner/proximity-app-final', process.cwd()];
+      const repoPaths = [findAppRoot(), process.cwd()];
       let results = [];
       for (const repoPath of repoPaths) {
         try {
@@ -1809,7 +1808,7 @@ async function handleMessage(ctx) {
         msg.match(/^please fix/i)) {
       await ctx.reply('🔍 Checking for errors...');
       
-      const appPath = process.env.PROJECT_PATH || '/Users/owner/proximity-app-final';
+      const appPath = findAppRoot();
       const { execSync } = await import('child_process');
       
       // Make sure repo is cloned and up to date
@@ -2356,7 +2355,7 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
       // Handle commit/push requests directly without LLM code generation
       if (specificTask.toLowerCase().includes('commit') || specificTask.toLowerCase().includes('push')) {
         await ctx.reply(`📦 Committing and pushing...`);
-        const appPath = process.env.PROJECT_PATH || '/Users/owner/proximity-app-final';
+        const appPath = findAppRoot();
         const githubToken = process.env.GITHUB_TOKEN;
         try {
           const { execSync } = await import('child_process');
