@@ -1632,29 +1632,37 @@ async function handleMessage(ctx) {
     if (msg.match(/^(git\s+)?pull(\s+latest|\s+from\s+github)?/i) || msg.includes('pull latest') || msg.includes('fetch latest')) {
       await ctx.reply('🔄 Pulling latest changes...');
       const { execSync } = await import('child_process');
+      const fs = await import('fs');
+      const path = await import('path');
       const repoPaths = [
         process.env.PROJECT_PATH || '/Users/owner/proximity-app-final',
         '/app',
         '/opt/render/project/src',
-        '/Users/owner/Documents/projects/Agents/agentkiro',
       ];
+      // Also check cwd and its parent for .git
+      try {
+        const cwd = process.cwd();
+        if (fs.existsSync(path.join(cwd, '.git'))) repoPaths.push(cwd);
+        if (fs.existsSync(path.join(cwd, '..', '.git'))) repoPaths.push(path.join(cwd, '..'));
+      } catch {}
       let results = [];
       for (const repoPath of repoPaths) {
         try {
-          if (!require('fs').existsSync(repoPath + '/.git') && !require('fs').existsSync(repoPath)) continue;
-          const out = execSync(`cd "${repoPath}" && git stash push -u -m "agent-stash" 2>&1; git pull --rebase origin main 2>&1 || git fetch origin && git reset --hard origin/main 2>&1`, { encoding: 'utf-8', timeout: 90000 });
-          const trimmed = out.substring(0, 200);
-          if (trimmed.includes('Already up to date') || trimmed.includes('HEAD is now')) {
-            results.push(`✅ ${repoPath.split('/').pop()}: updated`);
+          if (!fs.existsSync(repoPath)) continue;
+          if (!fs.existsSync(path.join(repoPath, '.git'))) continue;
+          const out = execSync(`cd "${repoPath}" && git stash push -u -m "agent-stash" 2>&1; git fetch origin 2>&1 && git reset --hard origin/main 2>&1 || git pull --rebase origin main 2>&1`, { encoding: 'utf-8', timeout: 90000 });
+          const trimmed = out.substring(0, 150);
+          if (trimmed.includes('Already up') || trimmed.includes('HEAD is now')) {
+            results.push(`✅ ${path.basename(repoPath)}: updated`);
           } else {
-            results.push(`✅ ${repoPath.split('/').pop()}: pulled`);
+            results.push(`✅ ${path.basename(repoPath)}: pulled`);
           }
         } catch (e) {
           const out = String(e.stdout || e.stderr || e.message || '');
           if (out.includes('Already up')) {
-            results.push(`✅ ${repoPath.split('/').pop()}: up to date`);
+            results.push(`✅ ${path.basename(repoPath)}: up to date`);
           } else {
-            results.push(`⚠️ ${repoPath.split('/').pop()}: ${out.substring(0, 120).replace(/\n/g, ' ')}`);
+            results.push(`⚠️ ${path.basename(repoPath)}: ${out.substring(0, 100).replace(/\n/g, ' ')}`);
           }
         }
       }
