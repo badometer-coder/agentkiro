@@ -2255,11 +2255,12 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
         const hasEdits = result.toolCalls.some(tc => tc.name === 'patch' || tc.name === 'write_file');
         if (hasReads && !hasEdits && readCount >= 2 && round >= 2) {
           console.log(`⚡ Action bias: forcing edit after ${readCount} reads`);
-          messages.push({ role: 'user', content: '[SYSTEM] STOP READING. Make the fix now with patch or write_file.' });
+          messages.push({ role: 'user', content: '[SYSTEM] STOP READING. You have enough context. Your NEXT tool call MUST be patch or write_file. No more reads allowed.' });
         }
-        if (readCount >= 4 && editCount === 0 && round >= 4) {
-          console.log(`⚡ Hard action bias: must edit now`);
-          messages.push({ role: 'user', content: '[SYSTEM] CRITICAL: You have read ${readCount} files with ZERO edits. Make a change NOW or explain what you found.' });
+        if (readCount >= 4 && editCount === 0 && round >= 3) {
+          console.log(`⚠️ Hard action bias: ${readCount} reads, 0 edits — forcing exit`);
+          finalReply = `I've read ${readCount} files but I'm not sure what change to make. Can you clarify: which specific file should I edit, and what exactly should I change?`;
+          break;
         }
 
       // Add assistant message with tool calls to conversation
