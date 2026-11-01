@@ -2531,11 +2531,13 @@ startBot();
 // Handle graceful shutdown
 process.on('SIGTERM', () => {
   console.log('🛑 SIGTERM received — shutting down gracefully');
+  try { if (bot) bot.stop(); } catch(e) {}
   process.exit(0);
 });
 
 process.on('SIGINT', () => {
   console.log('🛑 SIGINT received — shutting down gracefully');
+  try { if (bot) bot.stop(); } catch(e) {}
   process.exit(0);
 });
 
