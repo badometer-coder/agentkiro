@@ -2250,12 +2250,14 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
           lastToolCallSignature = toolSig;
         }
 
-        // Hermes-style: enforce action bias
+        // Hermes-style: enforce action bias with tool filtering
         const hasReads = result.toolCalls.some(tc => tc.name === 'read_file' || tc.name === 'search_files');
         const hasEdits = result.toolCalls.some(tc => tc.name === 'patch' || tc.name === 'write_file');
         if (hasReads && !hasEdits && readCount >= 2 && round >= 2) {
-          console.log(`⚡ Action bias: forcing edit after ${readCount} reads`);
-          messages.push({ role: 'user', content: '[SYSTEM] STOP READING. You have enough context. Your NEXT tool call MUST be patch or write_file. No more reads allowed.' });
+          console.log(`⚡ Action bias: removing read tools after ${readCount} reads`);
+          // Filter out read tools from the schema — model can't call them anymore
+          toolSchemas = toolSchemas.filter(t => t.name !== 'read_file' && t.name !== 'search_files');
+          messages.push({ role: 'user', content: '[SYSTEM] You have read enough. read_file and search_files are now DISABLED. Your next call MUST be patch or write_file to make the change.' });
         }
         if (readCount >= 4 && editCount === 0 && round >= 3) {
           console.log(`⚠️ Hard action bias: ${readCount} reads, 0 edits — forcing exit`);
