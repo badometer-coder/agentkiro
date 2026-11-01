@@ -1628,7 +1628,54 @@ async function handleMessage(ctx) {
       return;
     }
 
-    // --- GREETINGS ---
+    // --- GIT OPERATIONS ---
+    if (msg.match(/^(git\s+)?pull(\s+latest|\s+from\s+github)?/i) || msg.includes('pull latest') || msg.includes('fetch latest')) {
+      await ctx.reply('🔄 Pulling latest changes...');
+      const { execSync } = await import('child_process');
+      const repoPaths = [
+        process.env.PROJECT_PATH || '/Users/owner/proximity-app-final',
+        '/Users/owner/Documents/projects/Agents/agentkiro',
+        process.cwd()
+      ];
+      let results = [];
+      for (const repoPath of repoPaths) {
+        try {
+          const out = execSync(`cd "${repoPath}" && git pull --rebase origin main 2>&1 || git pull origin main 2>&1`, { encoding: 'utf-8', timeout: 60000 });
+          const trimmed = out.substring(0, 300);
+          results.push(`✅ ${repoPath.split('/').pop()}: ${trimmed.includes('Already up to date') ? 'up to date' : 'pulled'}`);
+        } catch (e) {
+          const out = String(e.stdout || e.stderr || e.message || '');
+          if (out.includes('Already up')) {
+            results.push(`✅ ${repoPath.split('/').pop()}: up to date`);
+          } else {
+            results.push(`⚠️ ${repoPath.split('/').pop()}: ${out.substring(0, 150).replace(/\n/g, ' ')}`);
+          }
+        }
+      }
+      return ctx.reply(results.join('\n'));
+    }
+
+    if (msg.match(/^git\s+(push|add\s+commit|commit\s+push)/i) || msg === 'git push') {
+      await ctx.reply('🔄 Pushing changes...');
+      const { execSync } = await import('child_process');
+      const repoPaths = [process.env.PROJECT_PATH || '/Users/owner/proximity-app-final', process.cwd()];
+      let results = [];
+      for (const repoPath of repoPaths) {
+        try {
+          const status = execSync(`cd "${repoPath}" && git status --short 2>&1`, { encoding: 'utf-8' });
+          if (!status.trim()) {
+            results.push(`ℹ️ ${repoPath.split('/').pop()}: nothing to commit`);
+            continue;
+          }
+          const out = execSync(`cd "${repoPath}" && git add . && git commit -m "chore: auto-commit from agent" 2>&1 && git push origin main 2>&1`, { encoding: 'utf-8', timeout: 120000 });
+          results.push(`✅ ${repoPath.split('/').pop()}: pushed`);
+        } catch (e) {
+          const out = String(e.stdout || e.stderr || e.message || '');
+          results.push(`⚠️ ${repoPath.split('/').pop()}: ${out.substring(0, 150).replace(/\n/g, ' ')}`);
+        }
+      }
+      return ctx.reply(results.join('\n'));
+    }
     if (/^(hey|hi|hello|sup|yo|hiya|howdy)[\s!.?]*$/.test(msg)) {
       return ctx.reply(`Hey! 👋 I'm your dev agent building the Proximity app.\n\n📋 Queued: ${taskQueue.length} tasks\n✅ Done: ${taskLog.length} tasks\n\nJust tell me what to do naturally!`);
     }
