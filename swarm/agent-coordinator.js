@@ -1946,6 +1946,14 @@ ${fileErrors}`;
       saveConversationHistory();
     }
 
+    // Ensure we have user message in history
+    if (conversationHistory.length === 0 || conversationHistory[conversationHistory.length - 1]?.role !== 'user') {
+      conversationHistory.push({ role: 'user', content: raw });
+    } else if (conversationHistory[conversationHistory.length - 1]?.content !== raw) {
+      conversationHistory.push({ role: 'user', content: raw });
+    }
+    if (conversationHistory.length > 30) conversationHistory = conversationHistory.slice(-30);
+
     console.log(`📜 History (${conversationHistory.length} entries):`);
     conversationHistory.slice(-4).forEach((m, i) => {
       console.log(`  [${i}] ${m.role}: ${m.content.substring(0, 80)}...`);
