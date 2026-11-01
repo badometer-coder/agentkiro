@@ -2250,40 +2250,12 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
           lastToolCallSignature = toolSig;
         }
 
-        // Hermes-style: enforce action bias with tool filtering
+        // Hermes-style: enforce action bias — bail out after 3 reads with 0 edits
         const hasReads = result.toolCalls.some(tc => tc.name === 'read_file' || tc.name === 'search_files');
         const hasEdits = result.toolCalls.some(tc => tc.name === 'patch' || tc.name === 'write_file');
-        if (hasReads && !hasEdits && readCount >= 2 && round >= 2) {
-          console.log(`⚡ Action bias: removing read tools after ${readCount} reads`);
-          // Make one more call with only edit tools available
-          const editOnlyTools = toolSchemas.filter(t => t.name !== 'read_file' && t.name !== 'search_files');
-          messages.push({ role: 'assistant', content: result.text || '', tool_calls: result.raw?.tool_calls });
-          // Add tool results from previous round
-          for (const tc of result.toolCalls) {
-            const res = await agentTools.executeToolCall(tc);
-            const trimmed = res.length > 3000 ? res.substring(0, 3000) + '\n...[trimmed]' : res;
-            if (tc.name === 'read_file' || tc.name === 'search_files') readCount++;
-            messages.push({ role: 'tool', tool_call_id: tc.id || tc.name, content: trimmed });
-            recentToolCalls.push({ name: tc.name, args: JSON.stringify(tc.args), result: trimmed.substring(0, 150) });
-            if (recentToolCalls.length > 20) recentToolCalls.shift();
-          }
-          messages.push({ role: 'user', content: '[SYSTEM] You have read enough. read_file and search_files are now DISABLED. Make the change NOW with patch or write_file.' });
-          // Call with filtered tools
-          const result2 = await llmProvider.callLLMWithTools(messages, editOnlyTools, { temperature: 0.2 });
-          if (!result2.toolCalls || result2.toolCalls.length === 0) {
-            finalReply = result2.text || 'Done.';
-            break;
-          }
-          // Replace result with the edit-only result and continue normal flow
-          result.toolCalls = result2.toolCalls;
-          result.text = result2.text;
-          result.raw = result2.raw;
-          round++;
-          console.log(`🔧 Round ${round + 1}: ${result2.toolCalls.length} tool call(s) (edit-only mode)`);
-        }
-        if (readCount >= 4 && editCount === 0 && round >= 3) {
-          console.log(`⚠️ Hard action bias: ${readCount} reads, 0 edits — forcing exit`);
-          finalReply = `I've read ${readCount} files but I'm not sure what change to make. Can you clarify: which specific file should I edit, and what exactly should I change?`;
+        if (readCount >= 3 && editCount === 0 && round >= 2) {
+          console.log(`⚠️ Action bias: ${readCount} reads, 0 edits — forcing exit`);
+          finalReply = `I've read ${readCount} files but need clarification. Can you tell me:\n1. Which specific file should I edit?\n2. What exact change should I make?\n\nOr share the error message/screenshot if there is one.`;
           break;
         }
 
