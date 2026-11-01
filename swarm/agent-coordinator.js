@@ -2137,7 +2137,7 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
         console.log(`🔧 Round ${round + 1}: ${result.toolCalls.length} tool call(s)`);
 
         // Hermes-style loop detection - track identical tool calls
-        const toolSig = JSON.stringify(result.toolCalls.map(tc => ({ name: tc.name, path: tc.args?.path, query: tc.args?.query })));
+        const toolSig = JSON.stringify(result.toolCalls.map(tc => ({ name: tc.name, path: tc.args?.path || '', query: tc.args?.query || '', old_string: tc.args?.old_string?.substring(0, 50) || '' })));
         if (toolSig === lastToolCallSignature) {
           identicalCallCount++;
           if (identicalCallCount >= 2) {
@@ -2145,7 +2145,7 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
             finalReply = "Already done - no changes needed.";
             break;
           }
-          messages.push({ role: 'user', content: '[SYSTEM] You just made the exact same tool call. Stop looping. If you need to fix something, make a different action or provide your answer.' });
+          messages.push({ role: 'user', content: '[SYSTEM] You just made the exact same tool call again. STOP. Either provide your answer explaining the situation, or make a DIFFERENT action.' });
         } else {
           identicalCallCount = 0;
           lastToolCallSignature = toolSig;
