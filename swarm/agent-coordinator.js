@@ -2116,7 +2116,7 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
 
     // Native function calling loop — like Hermes
     // Add clarification rule
-    systemPrompt += `\n\n# Clarify when confused\nIf you cannot confidently identify which file to edit or what the exact change is after 1-2 reads/searches, ASK THE USER a specific direct question. Do not guess, loop reading files, or invent assumptions. Examples: "Which file should I edit for X?" or "Do you mean Y or Z?"\n`;
+    systemPrompt += `\n\n# Clarify when confused\nIf you cannot confidently identify which file to edit or what the exact change is after 1-2 reads/searches, ASK THE USER a specific direct question. Do not guess, loop reading files, or invent assumptions. Examples: "Which file should I edit for X?" or "Do you mean Y or Z?"\n\n# CRITICAL: Clarify vague requests\nIf the request is vague like "X is not working", "fix bug", or lacks file names/specific details/error messages, you MUST ask for clarification BEFORE exploring. Ask 1-2 targeted questions like "Which screen/component is failing?" or "Can you share the exact error message?" Do NOT start reading multiple files to guess.\n`;
 
     const messages = [{ role: 'system', content: systemPrompt }, ...conversationHistory];
     if (messages.filter(m => m.role === 'user').length === 0 && raw) {
