@@ -66,28 +66,9 @@ export class AgentTools {
   }
 
   async searchFiles(query) {
-    const localPaths = [
-      this.env.PROJECT_PATH,
-      process.env.PROJECT_PATH,
-      '/Users/owner/proximity-app-final',
-      '/opt/render/project/proximity-app',
-      '/opt/render/project/src',
-      process.cwd().replace('/swarm','')
-    ].filter(Boolean);
-    for (const base of localPaths) {
-      if (fs.existsSync(base)) {
-        try {
-          const results = await this.searchLocal(base, query);
-          if (results && !results.includes('No results found')) {
-            return results;
-          }
-        } catch(e) {}
-      }
-    }
-    if (!this.token) return '❌ GITHUB_TOKEN not set and no local files found';
+    if (!this.token) return '❌ GITHUB_TOKEN not set';
     try {
       const fetch = (await import('node-fetch')).default;
-      // Search code in repo
       const url = `https://api.github.com/search/code?q=${encodeURIComponent(query + ' repo:' + this.repo)}&per_page=10`;
       const res = await fetch(url, {
         headers: { 
