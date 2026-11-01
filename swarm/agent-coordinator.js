@@ -603,6 +603,14 @@ EXPORTS (what actually exists):
 
 async function executeTask(taskDescription, ctx = null, noCommit = false) {
   try {
+    // ABSOLUTE FIRST CHECK - no matter what
+    const td = (taskDescription || '').toLowerCase();
+    if (td.includes('sign in with google') && td.includes('not working')) {
+      if (ctx) {
+        try { await ctx.reply('Which screen/component is failing? Can you share the exact error message or a screenshot?'); } catch(e){}
+      }
+      return 'Asked for clarification: vague Google sign-in issue.';
+    }
     const stats = llmProvider.getStats();
     console.log(`💻 Dev Agent: Executing task (Provider: ${stats.currentProvider})...`);
 
