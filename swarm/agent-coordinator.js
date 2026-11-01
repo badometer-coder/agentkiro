@@ -2253,16 +2253,19 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
           }
         }
 
-        // Hermes-style loop detection - track identical tool calls
+        // Identical call detection - but only after giving agent a chance to patch
         const toolSig = JSON.stringify(result.toolCalls.map(tc => ({ name: tc.name, path: tc.args?.path || '', query: tc.args?.query || '', old_string: tc.args?.old_string?.substring(0, 50) || '' })));
         if (toolSig === lastToolCallSignature) {
           identicalCallCount++;
-          if (identicalCallCount >= 2) {
+          // Give agent 2 rounds after reading to try patching before bailing
+          if (identicalCallCount >= 2 && (editCount > 0 || round >= 4)) {
             console.log(`⚠️  Agent stuck in loop (identical calls ${identicalCallCount}x) — bailing out`);
             finalReply = "I'm stuck in a loop. Can you share more details - error message, screenshot, or which file to look at?";
             break;
           }
-          messages.push({ role: 'user', content: '[SYSTEM] You just made the exact same tool call again. STOP. Either provide your answer explaining the situation, or make a DIFFERENT action.' });
+          if (identicalCallCount >= 1 && editCount === 0) {
+            messages.push({ role: 'user', content: '[SYSTEM] You just made the exact same tool call again. STOP READING. Either use patch/write_file to make a change, or use web_search to research the issue, or explain what you found.' });
+          }
         } else {
           identicalCallCount = 0;
           lastToolCallSignature = toolSig;
