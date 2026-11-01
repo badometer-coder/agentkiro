@@ -618,6 +618,15 @@ async function executeTask(taskDescription, ctx = null, noCommit = false) {
     const currentFiles = await readProjectFiles(appPath, taskDescription);
     console.log(`📂 Read existing project files for context`);
 
+    // Also check common local paths
+    const localAppPaths = [
+      process.env.PROJECT_PATH,
+      '/opt/render/project/proximity-app',
+      '/opt/render/project/src',
+      '/app',
+      '/Users/owner/proximity-app-final'
+    ].filter(Boolean);
+
     // === CLARIFY VAGUE REQUESTS EARLY ===
     const taskLower = taskDescription.toLowerCase();
     const vaguePatterns = ['sign in with google is not working', 'google sign in not working', 'login not working', 'sign in not working', 'auth not working'];
