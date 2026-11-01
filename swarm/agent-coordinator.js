@@ -1634,24 +1634,31 @@ async function handleMessage(ctx) {
       const { execSync } = await import('child_process');
       const repoPaths = [
         process.env.PROJECT_PATH || '/Users/owner/proximity-app-final',
+        '/app',
+        '/opt/render/project/src',
         '/Users/owner/Documents/projects/Agents/agentkiro',
-        process.cwd()
       ];
       let results = [];
       for (const repoPath of repoPaths) {
         try {
-          const out = execSync(`cd "${repoPath}" && git pull --rebase origin main 2>&1 || git pull origin main 2>&1`, { encoding: 'utf-8', timeout: 60000 });
-          const trimmed = out.substring(0, 300);
-          results.push(`✅ ${repoPath.split('/').pop()}: ${trimmed.includes('Already up to date') ? 'up to date' : 'pulled'}`);
+          if (!require('fs').existsSync(repoPath + '/.git') && !require('fs').existsSync(repoPath)) continue;
+          const out = execSync(`cd "${repoPath}" && git stash push -u -m "agent-stash" 2>&1; git pull --rebase origin main 2>&1 || git fetch origin && git reset --hard origin/main 2>&1`, { encoding: 'utf-8', timeout: 90000 });
+          const trimmed = out.substring(0, 200);
+          if (trimmed.includes('Already up to date') || trimmed.includes('HEAD is now')) {
+            results.push(`✅ ${repoPath.split('/').pop()}: updated`);
+          } else {
+            results.push(`✅ ${repoPath.split('/').pop()}: pulled`);
+          }
         } catch (e) {
           const out = String(e.stdout || e.stderr || e.message || '');
           if (out.includes('Already up')) {
             results.push(`✅ ${repoPath.split('/').pop()}: up to date`);
           } else {
-            results.push(`⚠️ ${repoPath.split('/').pop()}: ${out.substring(0, 150).replace(/\n/g, ' ')}`);
+            results.push(`⚠️ ${repoPath.split('/').pop()}: ${out.substring(0, 120).replace(/\n/g, ' ')}`);
           }
         }
       }
+      if (results.length === 0) results.push('ℹ️ No git repos found to pull');
       return ctx.reply(results.join('\n'));
     }
 
