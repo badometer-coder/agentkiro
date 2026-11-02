@@ -333,7 +333,7 @@ export class AgentTools {
       return `✅ Patched and pushed to GitHub: ${filePath}`;
     } catch (err) {
       // If 409 conflict, try to get fresh SHA and retry once
-      if (err.message && err.message.includes('409')) {
+      if (err.message && err.message.includes('409') && typeof updated !== 'undefined') {
         try {
           const fresh = await this.githubGet(filePath);
           await this.githubPut(filePath, updated, `AI: patch ${filePath}`, fresh.sha);
