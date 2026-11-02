@@ -1564,21 +1564,11 @@ async function handleMessage(ctx) {
     typingInterval = setInterval(restartTyping, 2000);
     console.log(`⌨️  Typing indicator started for chat ${ctx.chat.id}`);
 
-    // ABSOLUTE LAST CHECK - clarify before anything else
-    if (msg.includes('sign in with google') && msg.includes('not working')) {
-      // Don't ask — fall through to tool loop to fix it
-    }
-    if ((msg.includes('not working') || msg.includes('broken')) && 
-        !msg.includes('eas') && !msg.includes('git') && !msg.includes('.tsx') && !msg.includes('.ts') &&
-        (msg.includes('sign in') || msg.includes('google') || msg.includes('login') || msg.includes('auth'))) {
-      // Don't ask — fall through to tool loop to fix it
-      clearInterval(typingInterval);
-      typingInterval = null;
-      return;
-    }
+    // No more hardcoded clarification blocks — agent fixes, doesn't ask
     if (msg.includes('network request failed') || msg.includes('login failed') || 
         msg.includes('why is') || msg.includes('what is') || msg.includes('why does') ||
         msg.includes('what should') || msg.includes('what does') ||
+        msg === 'there are error' || msg === 'there are errors' || msg === 'errors' || msg === 'error' ||
         (msg.includes('not working') && !msg.match(/fix|change|update|add|remove/i))) {
       // These are diagnostic questions — answer from knowledge, don't read code
       const quickMessages = [

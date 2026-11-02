@@ -64,10 +64,14 @@ class MultiLLMProvider {
   loadApiKeys(prefix) {
     const keys = [];
     for (let i = 1; i <= 20; i++) {
-      const key = this.env[`${prefix}${i === 1 ? '' : '_' + i}`];
+      // Check both formats: KEY (i=1), KEY_1 (i=1), KEY_2 (i=2)...
+      const key1 = i === 1 ? this.env[prefix] : null;
+      const key2 = this.env[`${prefix}_${i}`];
+      const key = key1 || key2;
       if (key && !key.includes('paste_your') && !key.includes('your_')) keys.push(key);
     }
-    return keys;
+    // deduplicate
+    return [...new Set(keys)];
   }
 
   getCurrentProvider() { return this.providers[this.currentProviderIndex]; }
