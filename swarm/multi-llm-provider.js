@@ -31,7 +31,7 @@ class MultiLLMProvider {
           timeout: 120000,
         }),
         name: `GLM #${idx + 1}`,
-        model: 'zhipuai/glm-4-plus',
+        model: 'z-ai/glm-4.5',
       });
     });
 

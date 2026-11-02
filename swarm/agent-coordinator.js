@@ -1569,6 +1569,7 @@ async function handleMessage(ctx) {
         msg.includes('why is') || msg.includes('what is') || msg.includes('why does') ||
         msg.includes('what should') || msg.includes('what does') ||
         msg === 'there are error' || msg === 'there are errors' || msg === 'errors' || msg === 'error' ||
+        (msg.includes('supabase') && (msg.includes('client id') || msg.includes('invalid') || msg.includes('enable')) && !msg.includes('fix')) ||
         (msg.includes('not working') && !msg.match(/fix|change|update|add|remove/i))) {
       // These are diagnostic questions — answer from knowledge, don't read code
       const quickMessages = [
