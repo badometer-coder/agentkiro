@@ -223,42 +223,9 @@ export class AgentTools {
   }
 
   async patchFile(filePath, oldString, newString) {
-    const pathMod = await import('path');
-    const localPaths = [
-      this.env.PROJECT_PATH,
-      process.env.PROJECT_PATH,
-      '/Users/owner/proximity-app-final',
-      '/opt/render/project/proximity-app',
-      '/opt/render/project/src',
-      process.cwd().replace('/swarm','')
-    ].filter(Boolean);
-    for (const base of localPaths) {
-      const full = pathMod.join(base, filePath);
-      if (fs.existsSync(full)) {
-        try {
-          let content = fs.readFileSync(full, 'utf-8');
-          if (!content.includes(oldString)) {
-            // try fuzzy
-            const lines = content.split('\n');
-            const searchWords = oldString.split(/\s+/).filter(w => w.length > 3);
-            const matchingLines = [];
-            for (let i = 0; i < lines.length; i++) {
-              if (searchWords.some(w => lines[i].includes(w))) {
-                matchingLines.push(`Line ${i+1}: ${lines[i].substring(0, 120)}`);
-              }
-            }
-            if (matchingLines.length > 0) {
-              return `❌ patch_file: old_string not found exactly. Similar lines:\n${matchingLines.slice(0, 10).join('\n')}\n\nUse the exact whitespace from read_file.`;
-            }
-            return `❌ patch_file: old_string not found in ${filePath}`;
-          }
-          const newContent = content.split(oldString).join(newString);
-          fs.writeFileSync(full, newContent, 'utf-8');
-          return `✅ Patched locally: ${filePath}`;
-        } catch(e) {}
-      }
-    }
-    if (!this.token) return '❌ GITHUB_TOKEN not set and no local files found';
+    // GitHub token is always available on Render — go straight to GitHub API
+    // Local patching writes to disk without committing, which is useless on Render
+    if (!this.token) return '❌ GITHUB_TOKEN not set';
     try {
       const data    = await this.githubGet(filePath);
       const content = Buffer.from(data.content, 'base64').toString('utf-8');
