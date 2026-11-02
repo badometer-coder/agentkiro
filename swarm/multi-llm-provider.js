@@ -19,7 +19,23 @@ class MultiLLMProvider {
   }
 
   initializeProviders() {
-    // Groq first — faster and more reliable than Gemini on free tier
+    // GLM first — stronger coding model, OpenAI-compatible
+    const glmKeys = this.loadApiKeys('GLM_API_KEY');
+    glmKeys.forEach((key, idx) => {
+      this.providers.push({
+        type: 'openai',
+        key,
+        client: new OpenAI({
+          apiKey: key,
+          baseURL: 'https://open.bigmodel.cn/api/paas/v4',
+          timeout: 120000,
+        }),
+        name: `GLM #${idx + 1}`,
+        model: 'glm-4-plus',
+      });
+    });
+
+    // Groq as fallback
     const groqKeys = this.loadApiKeys('GROQ_API_KEY');
     groqKeys.forEach((key, idx) => {
       this.providers.push({ type: 'groq', key, client: new Groq({ apiKey: key, timeout: 120000 }), name: `Groq #${idx + 1}` });
@@ -161,8 +177,9 @@ class MultiLLMProvider {
 
   async _callProvider(provider, messages, options) {
     if (provider.type === 'groq' || provider.type === 'openai') {
+      const model = provider.model || (provider.type === 'groq' ? 'qwen/qwen3.8-27b' : 'gpt-4o-mini');
       const res = await provider.client.chat.completions.create({
-        model: provider.type === 'groq' ? 'qwen/qwen3.8-27b' : 'gpt-4o-mini',
+        model,
         messages,
         temperature: options.temperature ?? 0.3,
         max_tokens: options.max_tokens || 400,
@@ -199,7 +216,7 @@ class MultiLLMProvider {
 
     if (provider.type === 'groq' || provider.type === 'openai') {
       const res = await provider.client.chat.completions.create({
-        model: provider.type === 'groq' ? 'qwen/qwen3.8-27b' : 'gpt-4o-mini',
+        model: provider.model || (provider.type === 'groq' ? 'qwen/qwen3.8-27b' : 'gpt-4o-mini'),
         messages,
         tools,
         tool_choice: 'auto',
