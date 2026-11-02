@@ -93,11 +93,20 @@ NAVIGATION: Expo Router (file-based routing)
 
 ## Google Sign-In "not responding"
 If user reports "Login with Google button not responding" or "nothing happens when I tap it":
-- The issue is ALWAYS in AuthContext.tsx → signInWithOAuth implementation
-- React Native needs expo-web-browser to open OAuth URLs: \`await WebBrowser.openAuthSessionAsync(data.url)\`
-- Without it, the OAuth URL is generated but never opened, so button appears dead
-- Fix: read AuthContext.tsx, find signInWithOAuth, check if it opens the URL with WebBrowser or Linking
-- If skipBrowserRedirect:true is used, that's the bug — it doesn't work on mobile
+
+The complete fix requires TWO changes to src/context/AuthContext.tsx:
+
+1. Add Linking import (if not already there):
+   patch: old="import { AuthChangeEvent, Session, User } from '@supabase/supabase-js';"
+          new="import { Linking } from 'react-native';\nimport { AuthChangeEvent, Session, User } from '@supabase/supabase-js';"
+
+2. Add Linking.openURL after the OAuth call (find "return { data, error };" inside signInWithGoogle):
+   patch: old="    return { data, error };\n  };"
+          new="    if (data?.url) await Linking.openURL(data.url);\n    return { data, error };\n  };"
+
+Also if skipBrowserRedirect is true, set it to false.
+
+Read AuthContext.tsx ONCE, then make all patches. Do NOT read LoginScreen.tsx.
 
 ## Profile/user data "not showing"
 - Check if useEffect has the right dependencies: [session?.user?.id]
@@ -2216,7 +2225,7 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
           // Give agent 2 rounds after reading to try patching before bailing
           if (identicalCallCount >= 2 && (editCount > 0 || round >= 4)) {
             console.log(`⚠️  Agent stuck in loop (identical calls ${identicalCallCount}x) — forcing patch`);
-            messages.push({ role: 'user', content: '[SYSTEM] STOP READING THE SAME FILE. You must call patch NOW. For Google login: patch src/context/AuthContext.tsx, change "skipBrowserRedirect: true," to "skipBrowserRedirect: false,". Make the patch call immediately.' });
+          messages.push({ role: 'user', content: '[SYSTEM] STOP READING THE SAME FILE. You must call patch NOW on src/context/AuthContext.tsx. Make TWO patches: 1) Add "import { Linking } from \'react-native\';" before the supabase-js import. 2) Add "if (data?.url) await Linking.openURL(data.url);" before the return statement in signInWithGoogle. Do it now.' });
             identicalCallCount = 0;
           }
           if (identicalCallCount >= 1 && editCount === 0) {
@@ -2233,7 +2242,7 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
         const hasWebSearch = result.toolCalls.some(tc => tc.name === 'web_search');
         if (readCount >= 3 && editCount === 0 && !hasWebSearch && round >= 2) {
           console.log(`⚡ Action bias: ${readCount} reads, 0 edits — forcing patch`);
-          messages.push({ role: 'user', content: '[SYSTEM] You have read enough files. STOP READING and make the fix NOW using patch. For Google login not responding: patch src/context/AuthContext.tsx, change "skipBrowserRedirect: true," to "skipBrowserRedirect: false,". Call patch immediately.' });
+          messages.push({ role: 'user', content: '[SYSTEM] You have read enough files. STOP READING and make the fix NOW. Patch src/context/AuthContext.tsx: add "if (data?.url) await Linking.openURL(data.url);" before the return in signInWithGoogle. Also add "import { Linking } from \'react-native\';" at the top. Call patch immediately.' });
         }
         if (readCount >= 5 && editCount === 0 && round >= 3) {
           console.log(`⚠️ Action bias: ${readCount} reads, 0 edits — forcing patch`);
