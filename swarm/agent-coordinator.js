@@ -627,12 +627,6 @@ async function executeTask(taskDescription, ctx = null, noCommit = false) {
   try {
     // ABSOLUTE FIRST CHECK - no matter what
     const td = (taskDescription || '').toLowerCase();
-    if (td.includes('sign in with google') && td.includes('not working')) {
-      if (ctx) {
-        try { await ctx.reply('Which screen/component is failing? Can you share the exact error message or a screenshot?'); } catch(e){}
-      }
-      return 'Asked for clarification: vague Google sign-in issue.';
-    }
     const stats = llmProvider.getStats();
     console.log(`💻 Dev Agent: Executing task (Provider: ${stats.currentProvider})...`);
 
@@ -647,14 +641,9 @@ async function executeTask(taskDescription, ctx = null, noCommit = false) {
       '/Users/owner/proximity-app-final',
     ].filter(Boolean);
 
-    // === CLARIFY VAGUE REQUESTS EARLY ===
+    // === CLARIFY VAGUE REQUESTS EARLY — only for truly empty requests ===
     const taskLower = taskDescription.toLowerCase();
-    const vaguePatterns = ['sign in with google is not working', 'google sign in not working', 'login not working', 'sign in not working', 'auth not working', 'login with google it is not responding', 'login with google it is not working'];
-    const isVagueAuth = vaguePatterns.some(p => taskLower.includes(p)) && !taskLower.includes('.tsx') && !taskLower.includes('.ts') && !taskLower.includes('error');
-    if (isVagueAuth && ctx) {
-      await ctx.reply(`Which screen/component is failing? Can you share the exact error message or a screenshot?`);
-      return { success: false, skipped: true, reason: 'clarification_needed' };
-    }
+    // Never block requests that mention a specific feature, screen, or action
 
     // === WEB SEARCH: Extract API keywords from task and search for real documentation ===
     let webSearchContext = '';
@@ -1551,13 +1540,6 @@ async function handleMessage(ctx) {
     if (raw.startsWith('/') && raw !== '/providers') return; // allow /providers through
     console.log(`\n💬 User: "${raw}"`);
 
-    // IMMEDIATE CLARIFY for vague auth issues
-    if ((msg.includes('sign in with google') || (msg.includes('google') && msg.includes('sign') && msg.includes('not working'))) && 
-        !msg.includes('error:') && !msg.includes('stack') && !msg.match(/\.(tsx|ts|js|jsx)/)) {
-      await ctx.reply('Which screen/component is failing? Can you share the exact error message or a screenshot?');
-      return;
-    }
-
     // Deduplicate — ignore same message within 30 seconds
     const taskKey = raw.substring(0, 100);
     if (taskKey === lastTaskKey && Date.now() - lastTaskTime < 30000) {
@@ -1575,15 +1557,12 @@ async function handleMessage(ctx) {
 
     // ABSOLUTE LAST CHECK - clarify before anything else
     if (msg.includes('sign in with google') && msg.includes('not working')) {
-      await ctx.reply('Which screen/component is failing? Can you share the exact error message or a screenshot?');
-      clearInterval(typingInterval);
-      typingInterval = null;
-      return;
+      // Don't ask — fall through to tool loop to fix it
     }
     if ((msg.includes('not working') || msg.includes('broken')) && 
         !msg.includes('eas') && !msg.includes('git') && !msg.includes('.tsx') && !msg.includes('.ts') &&
         (msg.includes('sign in') || msg.includes('google') || msg.includes('login') || msg.includes('auth'))) {
-      await ctx.reply('Which screen is this happening on? Can you share the exact error message or a screenshot?');
+      // Don't ask — fall through to tool loop to fix it
       clearInterval(typingInterval);
       typingInterval = null;
       return;
@@ -2205,30 +2184,7 @@ Then on round 2, write the changes. A task should never take more than 3 rounds:
     // Always start from the best provider
     llmProvider.resetToFirst();
 
-    // ABSOLUTE CLARIFY before tool loop
-    if (raw.toLowerCase().includes('sign in with google') && raw.toLowerCase().includes('not working') && 
-        !raw.toLowerCase().includes('error') && !raw.toLowerCase().match(/\.(tsx|ts|js|jsx)/)) {
-      if (ctx) {
-        try { await ctx.reply('Which screen/component is failing? Can you share the exact error message or a screenshot?'); } catch(e){}
-      }
-      clearInterval(typingInterval);
-      typingInterval = null;
-      if (selfImprovementEngine.sessionLog.length > 0) {
-        await selfImprovementEngine.endTask(raw.substring(0, 100), 'Asked for clarification - vague request', true).catch(()=>{});
-      }
-      return;
-    }
-    if (raw.toLowerCase().includes('login with google') && (raw.toLowerCase().includes('not responding') || raw.toLowerCase().includes('not working'))) {
-      if (ctx) {
-        try { await ctx.reply('Which screen/component is failing? Can you share the exact error message or a screenshot?'); } catch(e){}
-      }
-      clearInterval(typingInterval);
-      typingInterval = null;
-      if (selfImprovementEngine.sessionLog.length > 0) {
-        await selfImprovementEngine.endTask(raw.substring(0, 100), 'Asked for clarification - vague request', true).catch(()=>{});
-      }
-      return;
-    }
+    // ABSOLUTE CLARIFY before tool loop — REMOVED: agent should fix, not ask
 
     while (round < MAX_ROUNDS) {
       const result = await llmProvider.callLLMWithTools(messages, toolSchemas, { temperature: 0.2 });
