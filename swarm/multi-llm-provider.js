@@ -20,14 +20,22 @@ class MultiLLMProvider {
 
   initializeProviders() {
     // GLM first — stronger coding model, OpenAI-compatible
+    // Keys from z.ai (international) only work on api.z.ai
+    // Keys from open.bigmodel.cn (China) only work on open.bigmodel.cn
+    // Try international first, fall back to China endpoint
     const glmKeys = this.loadApiKeys('GLM_API_KEY');
     glmKeys.forEach((key, idx) => {
+      // Default to international endpoint (api.z.ai)
+      const isChinaKey = key.startsWith('cn-') || key.includes('bigmodel');
+      const baseURL = isChinaKey
+        ? 'https://open.bigmodel.cn/api/paas/v4'
+        : 'https://api.z.ai/api/paas/v4';
       this.providers.push({
         type: 'openai',
         key,
         client: new OpenAI({
           apiKey: key,
-          baseURL: 'https://open.bigmodel.cn/api/paas/v4',
+          baseURL,
           timeout: 120000,
         }),
         name: `GLM #${idx + 1}`,
